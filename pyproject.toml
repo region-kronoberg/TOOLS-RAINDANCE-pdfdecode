@@ -1,0 +1,17 @@
+[project]
+name = "pdf-decode"
+version = "0.1.0"
+description = "Parser for AXT e-invoices"
+requires-python = ">=3.10"
+dependencies = [
+    "pdfplumber>=0.10.3",
+    "pydantic>=2.5.0",
+    "click>=8.1.0"
+]
+
+[project.scripts]
+pdf-decode = "pdf_decode.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
