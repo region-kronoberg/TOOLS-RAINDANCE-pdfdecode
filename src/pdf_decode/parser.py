@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from .utils import normalize_text, parse_swedish_date, parse_swedish_amount
 from .geometry import group_words_by_line
 from .constants import ANCHORS, LINE_Y_TOLERANCE

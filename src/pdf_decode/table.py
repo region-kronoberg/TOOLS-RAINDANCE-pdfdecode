@@ -2,7 +2,6 @@ from typing import List, Dict, Any, Optional
 from .utils import normalize_text, parse_swedish_amount
 from .geometry import group_words_by_line
 from .constants import HEADER_KEYWORDS, LINE_Y_TOLERANCE
-import re
 
 def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
@@ -101,9 +100,12 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
                  pass 
 
         # Parse numeric fields
-        if 'antal' in row_data: row_data['antal'] = parse_swedish_amount(row_data['antal'])
-        if 'a_pris' in row_data: row_data['a_pris'] = parse_swedish_amount(row_data['a_pris'])
-        if 'summa' in row_data: row_data['summa'] = parse_swedish_amount(row_data['summa'])
+        if 'antal' in row_data:
+            row_data['antal'] = parse_swedish_amount(row_data['antal'])
+        if 'a_pris' in row_data:
+            row_data['a_pris'] = parse_swedish_amount(row_data['a_pris'])
+        if 'summa' in row_data:
+            row_data['summa'] = parse_swedish_amount(row_data['summa'])
         
         # Filter empty rows or footer noise (e.g. "Att betala" line might be caught)
         if not row_data.get('benamning') and not row_data.get('summa'):

@@ -1,5 +1,4 @@
 import click
-import json
 from pathlib import Path
 from .processor import InvoiceProcessor
 

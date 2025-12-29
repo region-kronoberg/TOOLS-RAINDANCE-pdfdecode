@@ -1,5 +1,4 @@
 import re
-from datetime import datetime
 from typing import Optional
 
 def parse_swedish_amount(text: str) -> Optional[float]:
