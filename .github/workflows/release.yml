@@ -1,0 +1,22 @@
+name: Create Release (from Python build artifacts)
+
+on:
+  workflow_run:
+    # IMPORTANT: Must match the displayed name of your build workflow in THIS repo
+    workflows: ["Build (Python)"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  call-reusable-release:
+    # Only proceed when the build succeeded AND it was triggered by a push (so tags apply)
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    uses: region-kronoberg/.github/.github/workflows/python-release.yml@main
+    with:
+      run_id:  ${{ github.event.workflow_run.id }}       # pass source run id
+      head_sha: ${{ github.event.workflow_run.head_sha }} # pass source commit SHA
+      # tag_regex: '^v[0-9]+\.[0-9]+\.[0-9]+$'           # optional override
+    secrets: inherit

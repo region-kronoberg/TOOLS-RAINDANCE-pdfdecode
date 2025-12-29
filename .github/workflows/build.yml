@@ -1,0 +1,22 @@
+name: Build (Python)
+
+on:
+  push:
+    branches: [ main ]
+    tags: ['v*.*.*']   # run on tags so the reusable workflow can publish releases
+  pull_request:
+    branches: [ main ]
+
+# Needed so the called workflow can create/update releases
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: region-kronoberg/.github/.github/workflows/python-build.yml@main
+    with:
+      scripts_dir: src        # change if your scripts live elsewhere
+      python_version: "3.12"     # optional override      
+      # extra_files: config/config.ini.template, config/another.template
+      # extra_dirs: descriptions   # Include entire descriptions directory
+    secrets: inherit             # pass caller’s secrets to the called workflow
