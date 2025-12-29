@@ -5,7 +5,7 @@ def group_words_by_line(words: List[Dict[str, Any]], tolerance: int = 5) -> Dict
     Groups words into lines based on their Y-coordinate.
     Returns a dictionary where keys are Y-coordinates (integers) and values are lists of words.
     """
-    lines = {}
+    lines: Dict[int, List[Dict[str, Any]]] = {}
     for word in words:
         y_center = int((word['top'] + word['bottom']) / 2)
         found = False

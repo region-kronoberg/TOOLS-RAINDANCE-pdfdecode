@@ -29,7 +29,7 @@ def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             max_matches = matches
             best_line = line_words
             
-    if max_matches >= 2: # At least 2 columns identified
+    if max_matches >= 2 and best_line is not None: # At least 2 columns identified
         # Determine column ranges based on header words
         columns = {}
         line_top = min(w['top'] for w in best_line)
@@ -81,7 +81,7 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
     
     rows = []
     for y, line_words in sorted_lines:
-        row_data = {}
+        row_data: Dict[str, Any] = {}
         # Assign words to columns
         for word in line_words:
             word_center_x = (word['x0'] + word['x1']) / 2

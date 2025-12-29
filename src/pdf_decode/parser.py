@@ -16,7 +16,7 @@ def find_anchor(words: List[Dict[str, Any]], anchor_keys: List[str], strategy: s
     # Sort lines by Y
     sorted_y = sorted(lines.keys())
     if strategy == "last":
-        sorted_y = reversed(sorted_y)
+        sorted_y = list(reversed(sorted_y))
         
     for y in sorted_y:
         line_words = lines[y]
@@ -106,7 +106,7 @@ def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist
     sorted_lines = sorted(lines_dict.items(), key=lambda x: x[0])
     lines = [line for _, line in sorted_lines]
         
-    result_lines = []
+    result_lines: List[str] = []
     for line in lines:
         line_text = " ".join([w['text'] for w in line])
         
