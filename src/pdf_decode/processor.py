@@ -27,7 +27,7 @@ class InvoiceProcessor:
             # Check if this page has a header
             page_header = find_table_header(words)
             
-            start_y = 0
+            start_y: Optional[float] = 0
             
             if page_header:
                 active_header = page_header
