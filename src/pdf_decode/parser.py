@@ -28,7 +28,8 @@ def find_anchor(words: List[Dict[str, Any]], anchor_keys: List[str], strategy: s
         
         for w in line_words:
             nt = normalize_text(w['text'])
-            if not nt: continue 
+            if not nt: 
+                continue 
             
             start = len(full_text)
             if start > 0:
