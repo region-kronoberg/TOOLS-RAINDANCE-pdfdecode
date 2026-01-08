@@ -18,33 +18,28 @@ class InvoiceProcessor:
         
         # 3. Parse Table
         lines = []
-        table_header = None
+        active_header = None
+        row_counter = 1
         
-        # Try to find header on first page
-        if pages_data:
-            table_header = find_table_header(pages_data[0]['words'])
-        
-        if table_header:
-            row_counter = 1
-            for i, page in enumerate(pages_data):
-                words = page['words']
-                
-                # Check if this page has its own header (e.g. repeated header)
-                page_header = find_table_header(words)
-                
-                if page_header:
-                    current_header = page_header
-                    start_y = None # Use header bottom
-                elif i > 0:
-                    # Use first page header definition but start from top
-                    current_header = table_header
-                    start_y = 0
-                else:
-                    # First page, use found header
-                    current_header = table_header
-                    start_y = None
-                    
-                raw_rows = extract_table_rows(words, current_header, start_y=start_y)
+        for i, page in enumerate(pages_data):
+            words = page['words']
+            
+            # Check if this page has a header
+            page_header = find_table_header(words)
+            
+            start_y = 0
+            
+            if page_header:
+                active_header = page_header
+                start_y = None # Use header bottom
+            elif active_header:
+                # No header on this page, but we have an active header from previous pages
+                # Continue extracting from top of page
+                start_y = 0
+            
+            # Only extract if we have an active header
+            if active_header:
+                raw_rows = extract_table_rows(words, active_header, start_y=start_y)
                 
                 for r in raw_rows:
                     lines.append(InvoiceLine(

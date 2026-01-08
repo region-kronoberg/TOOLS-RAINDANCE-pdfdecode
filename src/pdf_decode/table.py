@@ -111,10 +111,15 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
         if not row_data.get('benamning') and not row_data.get('summa'):
             continue
             
-        # Stop if we hit totals (heuristic)
+        # Stop if we hit final totals
         raw_text = " ".join([w['text'] for w in line_words]).lower()
-        if "att betala" in raw_text or "totalsumma" in raw_text or "moms" in raw_text:
+        if "att betala" in raw_text or "totalsumma" in raw_text:
             break
+            
+        # Skip intermediate summary lines or tax lines
+        # But don't break, as there might be more items after
+        if "moms" in raw_text or "summa jobb" in raw_text:
+            continue
             
         rows.append(row_data)
     
