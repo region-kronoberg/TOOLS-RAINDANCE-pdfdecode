@@ -29,8 +29,6 @@ A robust Python tool for parsing PDF invoices and extracting structured data int
 3.  Install dependencies:
     ```bash
     pip install -r requirements.txt
-    # or
-    pip install .
     ```
 
 ## Usage

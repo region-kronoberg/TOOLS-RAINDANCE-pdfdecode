@@ -21,29 +21,47 @@ def find_anchor(words: List[Dict[str, Any]], anchor_keys: List[str], strategy: s
     for y in sorted_y:
         line_words = lines[y]
         line_words.sort(key=lambda w: w['x0'])
-        line_text = " ".join([w['text'] for w in line_words])
-        norm_line = normalize_text(line_text)
         
+        # Build mapping from normalized line text back to words
+        full_text = ""
+        word_map = [] # list of (start, end, word_obj)
+        
+        for w in line_words:
+            nt = normalize_text(w['text'])
+            if not nt: continue 
+            
+            start = len(full_text)
+            if start > 0:
+                full_text += " "
+                start += 1
+            full_text += nt
+            end = len(full_text)
+            word_map.append((start, end, w))
+
         for key in anchor_keys:
             # Check if key is in line using word boundaries
-            # Escape key to handle any special chars, though usually keys are simple
             pattern = r'\b' + re.escape(key) + r'\b'
-            if re.search(pattern, norm_line):
+            match = re.search(pattern, full_text)
+            if match:
+                m_end = match.end()
+                # Find the word that corresponds to the end of the match
+                # Loop backwards to find the word that covers the last character of the match
+                target_word = None
+                for start, end, w in word_map:
+                    if start <= (m_end - 1) < end:
+                         target_word = w
+                         break
+                
+                if target_word:
+                    return target_word
+                
+                # Fallback: if we couldn't map (maybe logic error), keep old flawed logic logic?
+                # Or try to find word containing last part?
                 last_key_part = key.split()[-1]
-                # Try exact match first
                 for word in line_words:
-                    if normalize_text(word['text']) == last_key_part:
-                        return word
-                # Fallback to suffix match (better than partial match)
-                for word in line_words:
-                    if normalize_text(word['text']).endswith(last_key_part):
-                        return word
-                # Fallback to partial match (only if suffix fails, but be careful)
-                # If we matched the line with \bkey\b, we should find a corresponding word.
-                # But sometimes word boundaries in regex don't match word boundaries in tokenization.
-                for word in line_words:
-                    if last_key_part in normalize_text(word['text']):
-                        return word
+                     if normalize_text(word['text']) == last_key_part:
+                         return word
+
     return None
 
 def get_text_right_of(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist: float = 300, max_word_gap: float = 60) -> str:
@@ -90,7 +108,8 @@ def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist
         if word['top'] > anchor['bottom'] and (word['top'] - anchor['bottom']) < max_dist_y:
             # Check horizontal alignment (roughly within anchor's x range or slightly wider)
             # Increased left tolerance to catch words that start before the anchor's last word
-            if word['x0'] >= (anchor['x0'] - 60) and word['x1'] <= (anchor['x1'] + max_width):
+            # Especially for multi-word anchors where the value aligns with the start of the anchor
+            if word['x0'] >= (anchor['x0'] - 100) and word['x1'] <= (anchor['x1'] + max_width):
                 target_words.append(word)
     
     # Sort by Y then X
@@ -233,7 +252,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['referens'] = try_extract('referens', multiline=True)
     result['referenser'] = try_extract('referenser')
     result['totalsumma'] = try_extract('totalsumma', parse_swedish_amount, strategy="last")
-    result['moms_belopp'] = try_extract('moms', parse_swedish_amount)
+    result['moms_belopp'] = try_extract('moms', parse_swedish_amount, max_word_gap=120)
     result['delsumma_exkl_moms'] = try_extract('delsumma', parse_swedish_amount, max_word_gap=150)
     
     # Supplier info (often found via OrgNr or Bankgiro)
