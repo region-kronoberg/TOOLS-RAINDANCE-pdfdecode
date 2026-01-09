@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from .utils import normalize_text, parse_swedish_amount
+from .utils import parse_swedish_amount
 from .geometry import group_words_by_line
 from .constants import HEADER_KEYWORDS, LINE_Y_TOLERANCE
 
