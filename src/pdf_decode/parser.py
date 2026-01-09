@@ -173,7 +173,27 @@ def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist
     
     # Sort lines by Y
     sorted_lines = sorted(lines_dict.items(), key=lambda x: x[0])
-    lines = [line for _, line in sorted_lines]
+    raw_lines = [line for _, line in sorted_lines]
+    
+    # Filter lines based on indentation consistency if multiline
+    lines = []
+    if raw_lines:
+        # First line sets the standard
+        first_line = raw_lines[0]
+        first_line.sort(key=lambda w: w['x0'])
+        ref_x = first_line[0]['x0']
+        lines.append(first_line)
+        
+        for line in raw_lines[1:]:
+             line.sort(key=lambda w: w['x0'])
+             curr_x = line[0]['x0']
+             
+             # If strict alignment is needed (multiline mode)
+             # If the next line starts significantly to the left (e.g. > 40px), assume it belongs to another column
+             if multiline and curr_x < (ref_x - 40):
+                 break
+             
+             lines.append(line)
         
     result_lines: List[str] = []
     for line in lines:
@@ -325,5 +345,8 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['supplier_kontakt'] = try_extract('kontakt')
     result['supplier_email'] = try_extract('email')
     result['supplier_telefon'] = try_extract('telefon')
+    result['supplier_iban'] = try_extract('iban')
+    result['supplier_bic'] = try_extract('bic')
+    result['supplier_peppol_id'] = try_extract('peppol_id')
 
     return result

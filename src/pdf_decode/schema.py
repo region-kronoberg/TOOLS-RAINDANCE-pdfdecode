@@ -10,6 +10,7 @@ class Supplier(BaseModel):
     plusgiro: Optional[str] = None
     iban: Optional[str] = None
     bic: Optional[str] = None
+    peppol_id: Optional[str] = None
     part_id: Optional[str] = None
     kontakt: Optional[str] = None
     email: Optional[str] = None
@@ -20,12 +21,8 @@ class InvoiceLine(BaseModel):
     artikelnr: Optional[str] = None
     benamning: Optional[str] = None
     antal: Optional[float] = None
-    enhet: Optional[str] = None
     a_pris: Optional[float] = None
-    rabatt_procent: Optional[float] = None
     summa: Optional[float] = None
-    moms_sats_procent: Optional[float] = None
-    raw_row: Optional[str] = None # For debugging
 
 class Totals(BaseModel):
     delsumma_exkl_moms: Optional[float] = None

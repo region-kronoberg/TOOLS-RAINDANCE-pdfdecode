@@ -16,16 +16,19 @@ ANCHORS = {
     "part_id": ["PartID:"],
     "kontakt": ["Kontakt:"],
     "email": ["Email:", "e-mail", "e-post", "epost"],
-    "telefon": ["Telefon:"]
+    "telefon": ["Telefon:"],
+    "iban": ["IBAN:"],
+    "bic": ["BIC:"],
+    "peppol_id": ["Peppol-ID:"]
 }
 
 HEADER_KEYWORDS = {
-    "artikelnr": ["artikelnr", "art.nr", "artikel"],
-    "benamning": ["benamning", "beskrivning", "text", "specifikation"],
-    "antal": ["antal", "ant", "kvantitet"],
-    "enhet": ["enhet", "enh"],
-    "a_pris": ["a pris", "pris", "enhetspris", "a'pris", "á pris", "à pris"],
-    "summa": ["summa", "belopp", "totalt"]
+    "artikelnr": ["Artikelnr"],
+    "benamning": ["Benämning"],
+    "antal": ["Antal"],
+    "enhet": ["enhet", "enh"], # Keep these as no header column found in example, might need adjustment
+    "a_pris": ["A'pris"],
+    "summa": ["Summa"]
 }
 
 # Tolerances

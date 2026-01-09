@@ -17,11 +17,17 @@ def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     
     for y, line_words in lines.items():
         matches = 0
-        line_text = " ".join([w['text'] for w in line_words]).lower()
+        # Check against raw text line for strict matching if needed, 
+        # or normalize if variants are loosely defined.
+        # Current HEADER_KEYWORDS are strict: ["Artikelnr"], ["Benämning"] etc.
+        # So we should match against raw words.
+        
+        line_raw_words = [w['text'] for w in line_words]
         
         for key, variants in HEADER_KEYWORDS.items():
             for var in variants:
-                if var in line_text:
+                # Exact match against any word in the line
+                if var in line_raw_words:
                     matches += 1
                     break
         
@@ -39,12 +45,13 @@ def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         best_line.sort(key=lambda w: w['x0'])
         
         for word in best_line:
-            norm = normalize_text(word['text'])
+            # Check raw text against strict variants
+            raw_text = word['text']
             for col_name, variants in HEADER_KEYWORDS.items():
-                if norm in variants:
+                if raw_text in variants:
                     # Found a column header. 
                     # Define range: start at word x0, end at next header x0 (or page width)
-                    columns[col_name] = {'start': word['x0'], 'end': None} # Will fix end later
+                    columns[col_name] = {'start': word['x0'], 'end': None} 
                     break
         
         # Fix 'end' coordinates
@@ -84,15 +91,39 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
         row_data: Dict[str, Any] = {}
         # Assign words to columns
         for word in line_words:
+            # Use improved check: check overlap with column range or center point
+            # Center point is safer for narrow columns
             word_center_x = (word['x0'] + word['x1']) / 2
             
             assigned = False
+            
+            # Pre-emptive numeric check for misaligned columns (like Antal)
+            # Prioritize assigning numeric values to Antal/A-pris if they are close to the left edge
+            if word['text'].replace('.','').replace(',','').strip().isdigit():
+                 for col_name in ['antal', 'a_pris', 'summa']:
+                    if col_name in columns:
+                        x_range = columns[col_name]
+                        # If word is within 30pts left of start, grab it. +5 to allow slight overlap into column.
+                        if (x_range['start'] - 30) <= word_center_x < x_range['start'] + 5:
+                            current_val = row_data.get(col_name, "")
+                            row_data[col_name] = (current_val + " " + word['text']).strip()
+                            assigned = True
+                            break
+            
+            if assigned:
+                continue
+
             for col_name, x_range in columns.items():
+                # Allow a small tolerance for column boundaries?
+                # Using 0 tolerance for strictness since headers define start
                 if x_range['start'] <= word_center_x < x_range['end']:
                     current_val = row_data.get(col_name, "")
                     row_data[col_name] = (current_val + " " + word['text']).strip()
                     assigned = True
                     break
+            
+            # Fallback for "antal" and "a_pris" overlapping?
+            # Handled by pre-emptive numeric check above.
             
             # Fallback: if not assigned (maybe left of first col?), add to first col if it's description
             if not assigned and 'benamning' in columns:
