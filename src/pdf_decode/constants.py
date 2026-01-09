@@ -1,22 +1,22 @@
 ANCHORS = {
-    "fakturanummer": ["fakturanummer", "fakturanr", "faktura nr", "invoice no"],
-    "fakturadatum": ["fakturadatum", "faktura datum", "invoice date", "datum"],
-    "forfallodatum": ["forfallodatum", "forfallodag", "due date", "betalas senast"],
-    "ocr": ["ocr ref", "ocr", "ocr nummer", "ocr nr", "referens nr"],
+    "fakturanummer": ["Fakturanummer:"],
+    "fakturadatum": ["Fakturadatum:"],
+    "forfallodatum": ["Förfallodatum:"],
+    "ocr": ["OCR Ref:", "ocr", "ocr nummer", "ocr nr", "referens nr"],
     "totalsumma": ["att betala", "totalsumma", "summa att betala", "belopp att betala"],
     "moms": ["varav moms", "total moms", "momsbelopp"],
     "delsumma": ["summa exkl moms", "delsumma", "nettobelopp"],
-    "bankgiro": ["bankgiro", "bg"],
+    "bankgiro": ["Bankgiro:"],
     "plusgiro": ["plusgiro", "pg"],
-    "orgnr": ["organisationsnummer", "org nr"],
-    "vat": ["vat nr", "momsreg nr", "vat no"],
-    "referens": ["er referens", "var referens", "referens"],
+    "orgnr": ["Org.nr:"],
+    "vat": ["Momsreg.nr:"],
+    "referens": ["Er referens:", "var referens", "referens"],
     "referenser": ["referenser"],
     "fakturaperiod": ["fakturaperiod", "period"],
-    "part_id": ["partid", "part id"],
-    "kontakt": ["kontakt", "contact"],
-    "email": ["email", "e-mail", "e-post", "epost"],
-    "telefon": ["telefon", "tel", "phone", "tfn"]
+    "part_id": ["PartID:"],
+    "kontakt": ["Kontakt:"],
+    "email": ["Email:", "e-mail", "e-post", "epost"],
+    "telefon": ["Telefon:"]
 }
 
 HEADER_KEYWORDS = {

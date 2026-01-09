@@ -131,3 +131,37 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^\w\s%]', ' ', text) # Keep % for VAT
     text = re.sub(r'\s+', ' ', text).strip()
     return text
+
+def parse_bankgiro(text: str) -> Optional[str]:
+    """Parses a Bankgiro number (3-4 digits, dash, 4 digits). Can also handle numbers without dashes."""
+    if not text:
+        return None
+        
+    # Common cleanup
+    t = text.replace(' ', '').replace('-', '')
+    
+    # Check length
+    if len(t) == 7 and t.isdigit():
+        return f"{t[:3]}-{t[3:]}"
+    elif len(t) == 8 and t.isdigit():
+        return f"{t[:4]}-{t[4:]}"
+    
+    # Fallback to search if there's other junk
+    if '-' in text:
+        match = re.search(r'(\d{3,4}-\d{4})', text.replace(' ', ''))
+        if match:
+            return match.group(1)
+            
+    return None
+
+def parse_plusgiro(text: str) -> Optional[str]:
+    """Parses a Plusgiro number (2-7 digits, dash, 1 digit)."""
+    if not text:
+        return None
+        
+    t = text.replace(' ', '')
+    match = re.search(r'(\d{2,7}-\d{1})', t)
+    if match:
+        return match.group(1)
+
+    return None

@@ -1,69 +1,118 @@
 from typing import List, Dict, Any, Optional
-from .utils import normalize_text, parse_swedish_date, parse_swedish_amount
+from .utils import normalize_text, parse_swedish_date, parse_swedish_amount, parse_bankgiro, parse_plusgiro
 from .geometry import group_words_by_line
 from .constants import ANCHORS, LINE_Y_TOLERANCE
 import re
 
-def find_anchor(words: List[Dict[str, Any]], anchor_keys: List[str], strategy: str = "first") -> Optional[Dict[str, Any]]:
+def find_all_anchors(words: List[Dict[str, Any]], anchor_keys: List[str]) -> List[Dict[str, Any]]:
     """
-    Finds the anchor. Supports multi-word anchors by checking lines.
-    Returns the LAST word of the matched anchor phrase.
-    strategy: "first" (default) or "last" (finds the last occurrence on the page, useful for totals at bottom)
+    Finds all occurrences of anchors. Returns a list of anchor words (last word of the phrase), sorted by Y position.
     """
-    # Group by line
+    found_anchors = []
     lines = group_words_by_line(words, tolerance=LINE_Y_TOLERANCE)
-            
-    # Sort lines by Y
     sorted_y = sorted(lines.keys())
-    if strategy == "last":
-        sorted_y = list(reversed(sorted_y))
         
     for y in sorted_y:
         line_words = lines[y]
         line_words.sort(key=lambda w: w['x0'])
         
-        # Build mapping from normalized line text back to words
+        # Build both normalized text and raw text mappings
         full_text = ""
-        word_map = [] # list of (start, end, word_obj)
+        full_raw_text = ""
+        
+        word_map = [] # start, end (normalized)
+        raw_word_map = [] # start, end (raw)
         
         for w in line_words:
+            # Normalized construction
             nt = normalize_text(w['text'])
-            if not nt: 
-                continue 
+            if nt: 
+                start = len(full_text)
+                if start > 0:
+                    full_text += " "
+                    start += 1
+                full_text += nt
+                end = len(full_text)
+                word_map.append((start, end, w))
             
-            start = len(full_text)
-            if start > 0:
-                full_text += " "
-                start += 1
-            full_text += nt
-            end = len(full_text)
-            word_map.append((start, end, w))
+            # Raw construction - use exact text but join with space
+            rt = w['text']
+            raw_start = len(full_raw_text)
+            if raw_start > 0:
+                full_raw_text += " "
+                raw_start += 1
+            full_raw_text += rt
+            raw_end = len(full_raw_text)
+            raw_word_map.append((raw_start, raw_end, w))
 
         for key in anchor_keys:
-            # Check if key is in line using word boundaries
-            pattern = r'\b' + re.escape(key) + r'\b'
-            match = re.search(pattern, full_text)
-            if match:
-                m_end = match.end()
-                # Find the word that corresponds to the end of the match
-                # Loop backwards to find the word that covers the last character of the match
-                target_word = None
-                for start, end, w in word_map:
-                    if start <= (m_end - 1) < end:
-                         target_word = w
-                         break
-                
-                if target_word:
-                    return target_word
-                
-                # Fallback: if we couldn't map (maybe logic error), keep old flawed logic logic?
-                # Or try to find word containing last part?
-                last_key_part = key.split()[-1]
-                for word in line_words:
-                     if normalize_text(word['text']) == last_key_part:
-                         return word
+            # Check if key requires raw matching (contains punctuation or upper case)
+            use_raw = any(c.isupper() for c in key) or not key.isalnum()
+            # If standard normalization removes necessary chars (like colon), force raw
+            if ":" in key:
+                use_raw = True
+            
+            target_text = full_raw_text if use_raw else full_text
+            target_map = raw_word_map if use_raw else word_map
+            
+            # If raw matching, we might not want \b boundaries if key ends with symbol
+            if use_raw:
+                # Use simple string search or regex without boundaries if needed
+                # For "Bankgiro:", just search literal string
+                try:
+                    # Find all occurrences
+                    start_idx = 0
+                    while True:
+                        idx = target_text.find(key, start_idx)
+                        if idx == -1:
+                            break
+                        
+                        m_end = idx + len(key)
+                        
+                        # Find matched word
+                        target_word = None
+                        for start, end, w in target_map:
+                            if start <= (m_end - 1) < end:
+                                 target_word = w
+                                 break
+                        
+                        if target_word:
+                            found_anchors.append(target_word)
+                        
+                        start_idx = idx + 1
+                except Exception:
+                     pass
+            else:
+                # Standard normalized regex search
+                pattern = r'\b' + re.escape(key) + r'\b'
+                for match in re.finditer(pattern, full_text):
+                    m_end = match.end()
+                    target_word = None
+                    for start, end, w in word_map:
+                        if start <= (m_end - 1) < end:
+                             target_word = w
+                             break
+                    
+                    if target_word:
+                        found_anchors.append(target_word)
+                    else: 
+                        # Fallback logic for safety
+                        last_key_part = key.split()[-1]
+                        for word in line_words:
+                             if normalize_text(word['text']) == last_key_part:
+                                 found_anchors.append(word)
+                                 break
+    return found_anchors
 
-    return None
+def find_anchor(words: List[Dict[str, Any]], anchor_keys: List[str], strategy: str = "first") -> Optional[Dict[str, Any]]:
+    anchors = find_all_anchors(words, anchor_keys)
+    if not anchors:
+        return None
+    
+    if strategy == "last":
+        return anchors[-1]
+    return anchors[0]
+
 
 def get_text_right_of(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist: float = 300, max_word_gap: float = 60) -> str:
     """
@@ -221,29 +270,36 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     
     # Helper to try finding a field
     def try_extract(field_key, parser_func=None, multiline=False, strategy="first", max_word_gap=60):
-        anchor_word = find_anchor(first_page_words, ANCHORS.get(field_key, []), strategy=strategy)
-        if anchor_word:
+        candidates = find_all_anchors(first_page_words, ANCHORS.get(field_key, []))
+        if strategy == "last":
+            candidates = list(reversed(candidates))
+            
+        # First Pass: Try finding value to the RIGHT for ANY candidate
+        # This prioritizes "Label: Value" format which is most reliable
+        for anchor_word in candidates:
             # Try right first
             val_right = get_text_right_of(first_page_words, anchor_word, max_word_gap=max_word_gap)
             
             # If we have a parser function, check if the value is valid
-            if val_right and parser_func:
-                res = parser_func(val_right)
-                if res is not None:
-                    return res
-                # If parsing failed, treat as if we didn't find anything right (unless we want to return raw text?)
-                # But here we want to fallback to below if right is garbage (like "Varav moms")
-                val_right = None
-            elif val_right:
-                return val_right
+            if val_right:
+                if parser_func:
+                    res = parser_func(val_right)
+                    if res is not None:
+                        return res
+                else:
+                    return val_right
 
-            # Try below if right failed or was empty
-            val_below = get_text_below(first_page_words, anchor_word, multiline=multiline)
+        # Second Pass: If no value to right, try BELOW
+        # Use strategy to pick which anchor to use (first or last)
+        if candidates:
+            primary_anchor = candidates[0]
+            val_below = get_text_below(first_page_words, primary_anchor, multiline=multiline)
             
             if val_below and parser_func:
                 res = parser_func(val_below)
                 return res
             return val_below if val_below else None
+        
         return None
 
     result['fakturanummer'] = try_extract('fakturanummer')
@@ -262,8 +318,8 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['supplier_address'] = supplier_info['address']
     
     result['supplier_orgnr'] = try_extract('orgnr')
-    result['supplier_bankgiro'] = try_extract('bankgiro')
-    result['supplier_plusgiro'] = try_extract('plusgiro')
+    result['supplier_bankgiro'] = try_extract('bankgiro', parse_bankgiro)
+    result['supplier_plusgiro'] = try_extract('plusgiro', parse_plusgiro)
     result['supplier_vat'] = try_extract('vat')
     result['supplier_part_id'] = try_extract('part_id')
     result['supplier_kontakt'] = try_extract('kontakt')
