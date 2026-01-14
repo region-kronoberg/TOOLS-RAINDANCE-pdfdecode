@@ -114,14 +114,38 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
             if assigned:
                 continue
 
+            target_col = None
             for col_name, x_range in columns.items():
                 # Allow a small tolerance for column boundaries?
                 # Using 0 tolerance for strictness since headers define start
                 if x_range['start'] <= word_center_x < x_range['end']:
-                    current_val = row_data.get(col_name, "")
-                    row_data[col_name] = (current_val + " " + word['text']).strip()
-                    assigned = True
+                    target_col = col_name
                     break
+            
+            # Fix for overlapping Article Number and Description
+            # If we have interleaved fragments near the boundary, separate them by type.
+            if target_col in ['artikelnr', 'benamning'] and 'artikelnr' in columns and 'benamning' in columns:
+                art_end = columns['artikelnr']['end']
+                
+                # Only apply if Benamning actually follows Artikelnr (adjacent)
+                if abs(columns['benamning']['start'] - art_end) < 1:
+                    dist = abs(word_center_x - art_end)
+                    
+                    # If within 60pt of the boundary
+                    if dist < 60:
+                        txt = word['text'].strip()
+                        # If assigned to ArtNr but is clearly a text fragment (e.g. 'F', 'r', 'e' from Fresubin)
+                        # Length < 4 to capture fragments
+                        if target_col == 'artikelnr' and txt.isalpha() and len(txt) < 4:
+                             target_col = 'benamning'
+                        # If assigned to Benamning but is clearly a numeric fragment (e.g. '9', '5' from ArtNo)
+                        elif target_col == 'benamning' and (txt.isdigit() or txt == '/') and len(txt) < 4:
+                             target_col = 'artikelnr'
+
+            if target_col:
+                current_val = row_data.get(target_col, "")
+                row_data[target_col] = (current_val + " " + word['text']).strip()
+                assigned = True
             
             # Fallback for "antal" and "a_pris" overlapping?
             # Handled by pre-emptive numeric check above.
@@ -130,6 +154,32 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
             if not assigned and 'benamning' in columns:
                  # Heuristic: if it's close to benamning
                  pass 
+
+        # Clean up overlap between artikelnr and benamning where chars are interleaved
+        # e.g. ArtNr: "40518F9r5e0su3b9i9n8" (Fresubin interleaved with digits)
+        #      Ben: "e5nergy ..." (Digit 5 embedded in energy)
+        if 'artikelnr' in row_data and 'benamning' in row_data:
+            an = row_data['artikelnr']
+            ben = row_data['benamning']
+            
+            ben_first = ben.split(' ')[0]
+            # Check if Benamning start word is corrupted with digits (e.g. e5nergy)
+            if any(c.isdigit() for c in ben_first) and any(c.isalpha() for c in ben_first):
+                # Check if Artikelnr has letters (intruders)
+                if any(c.isalpha() for c in an):
+                    cleaned_an = "".join([c for c in an if not c.isalpha()])
+                    # Safety check: ArtNr should be substantial (likely barcodes)
+                    count_digits = sum(1 for c in cleaned_an if c.isdigit())
+                    
+                    if count_digits >= 8:
+                        extracted_letters = "".join([c for c in an if c.isalpha()])
+                        fw_digits = "".join([c for c in ben_first if c.isdigit()])
+                        fw_letters = "".join([c for c in ben_first if c.isalpha()])
+                        
+                        row_data['artikelnr'] = cleaned_an + fw_digits
+                        
+                        ben_rest = ben[len(ben_first):]
+                        row_data['benamning'] = (extracted_letters + " " + fw_letters + ben_rest).strip()
 
         # Parse numeric fields
         if 'antal' in row_data:
