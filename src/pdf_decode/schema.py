@@ -21,6 +21,7 @@ class InvoiceLine(BaseModel):
     artikelnr: Optional[str] = None
     benamning: Optional[str] = None
     antal: Optional[float] = None
+    enhet: Optional[str] = None
     a_pris: Optional[float] = None
     summa: Optional[float] = None
 

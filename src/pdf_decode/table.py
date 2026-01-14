@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import re
 from .utils import parse_swedish_amount
 from .geometry import group_words_by_line
 from .constants import HEADER_KEYWORDS, LINE_Y_TOLERANCE
@@ -132,6 +133,16 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
 
         # Parse numeric fields
         if 'antal' in row_data:
+            # Extract unit from antal string before parsing number
+            # Look for suffix like "KG", "TIM", "st", "M3" (handling alphanumeric if needed, but usually letters)
+            # Assuming unit is mainly alphabetic characters
+            # Also accept "-" as unit if it is separated by space (to distinguish from negative numbers like 5-)
+            match_unit = re.search(r'(?:([A-Za-zåäöÅÄÖ]+(?:/[A-Za-zåäöÅÄÖ]+)?\.?)|(\s-))\s*$', row_data['antal'])
+            if match_unit:
+                 row_data['enhet'] = match_unit.group(0).strip()
+                 # Remove the unit from the string
+                 row_data['antal'] = row_data['antal'][:match_unit.start()] + row_data['antal'][match_unit.end():]
+            
             row_data['antal'] = parse_swedish_amount(row_data['antal'])
         if 'a_pris' in row_data:
             row_data['a_pris'] = parse_swedish_amount(row_data['a_pris'])
