@@ -148,7 +148,7 @@ def get_text_right_of(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_d
         
     return " ".join([w['text'] for w in result_words])
 
-def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist_y: float = 50, max_width: float = 200, multiline: bool = False) -> str:
+def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist_y: float = 50, max_width: float = 200, multiline: bool = False, left_tolerance: float = 100) -> str:
     """
     Gets text below the anchor.
     """
@@ -159,7 +159,7 @@ def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist
             # Check horizontal alignment (roughly within anchor's x range or slightly wider)
             # Increased left tolerance to catch words that start before the anchor's last word
             # Especially for multi-word anchors where the value aligns with the start of the anchor
-            if word['x0'] >= (anchor['x0'] - 100) and word['x1'] <= (anchor['x1'] + max_width):
+            if word['x0'] >= (anchor['x0'] - left_tolerance) and word['x1'] <= (anchor['x1'] + max_width):
                 target_words.append(word)
     
     # Sort by Y then X
@@ -289,7 +289,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result = {}
     
     # Helper to try finding a field
-    def try_extract(field_key, parser_func=None, multiline=False, strategy="first", max_word_gap=60):
+    def try_extract(field_key, parser_func=None, multiline=False, strategy="first", max_word_gap=60, left_tolerance=100):
         candidates = find_all_anchors(first_page_words, ANCHORS.get(field_key, []))
         if strategy == "last":
             candidates = list(reversed(candidates))
@@ -313,7 +313,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Use strategy to pick which anchor to use (first or last)
         if candidates:
             primary_anchor = candidates[0]
-            val_below = get_text_below(first_page_words, primary_anchor, multiline=multiline)
+            val_below = get_text_below(first_page_words, primary_anchor, multiline=multiline, left_tolerance=left_tolerance)
             
             if val_below and parser_func:
                 res = parser_func(val_below)
@@ -327,7 +327,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['forfallodatum'] = try_extract('forfallodatum', parse_swedish_date)
     result['ocr_nummer'] = try_extract('ocr')
     result['referens'] = try_extract('referens', multiline=True)
-    result['referenser'] = try_extract('referenser')
+    result['referenser'] = try_extract('referenser', left_tolerance=5)
     result['totalsumma'] = try_extract('totalsumma', parse_swedish_amount, strategy="last")
     result['moms_belopp'] = try_extract('moms', parse_swedish_amount, max_word_gap=120)
     result['delsumma_exkl_moms'] = try_extract('delsumma', parse_swedish_amount, max_word_gap=150)
