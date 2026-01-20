@@ -25,6 +25,10 @@ class InvoiceLine(BaseModel):
     a_pris: Optional[float] = None
     summa: Optional[float] = None
 
+class Adjustment(BaseModel):
+    beskrivning: str
+    belopp: float
+
 class Totals(BaseModel):
     delsumma_exkl_moms: Optional[float] = None
     moms_belopp: Optional[float] = None
@@ -44,6 +48,7 @@ class Invoice(BaseModel):
     supplier: Supplier = Field(default_factory=Supplier)
     lines: List[InvoiceLine] = Field(default_factory=list)
     totals: Totals = Field(default_factory=Totals)
+    justeringar: List[Adjustment] = Field(default_factory=list)
     
     source_file: str
     extracted_at: str

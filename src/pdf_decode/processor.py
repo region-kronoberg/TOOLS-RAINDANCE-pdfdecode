@@ -4,7 +4,7 @@ from typing import Optional
 from .extract import extract_layout
 from .parser import parse_header
 from .table import find_table_header, extract_table_rows
-from .schema import Invoice, Supplier, Totals, InvoiceLine
+from .schema import Invoice, Supplier, Totals, InvoiceLine, Adjustment
 
 class InvoiceProcessor:
     def process(self, pdf_path: Path) -> Optional[Invoice]:
@@ -84,6 +84,7 @@ class InvoiceProcessor:
                 delsumma_exkl_moms=header_data.get('delsumma_exkl_moms')
             ),
             lines=lines,
+            justeringar=[Adjustment(**adj) for adj in header_data.get('justeringar', [])],
             raw_extraction=header_data # Store raw header data for debugging
         )
         

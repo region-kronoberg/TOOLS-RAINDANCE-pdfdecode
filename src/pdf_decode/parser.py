@@ -278,6 +278,64 @@ def extract_supplier_info(words: List[Dict[str, Any]]) -> Dict[str, Optional[str
     
     return {'name': name, 'address': address}
 
+def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Extracts adjustments like "Avgår egenavgift".
+    Looks for headers like "Rabatter", "Avgifter", "Övrigt".
+    """
+    headers = ["Rabatter", "Avgifter", "Övrigt"]
+    found_header = None
+    for w in words:
+        if w['text'] in headers:
+            found_header = w
+            break
+            
+    if not found_header:
+        # Fallback: check normalized text for case insensitivity or substrings
+        for w in words:
+            if any(h.lower() in w['text'].lower() for h in headers):
+                 found_header = w
+                 break
+    
+    if not found_header:
+        return []
+
+    adjustments = []
+    
+    header_left = found_header['x0'] - 20
+    header_max_y = found_header['bottom'] + 200 
+    
+    candidates = []
+    for w in words:
+        if w['top'] > found_header['bottom'] and w['top'] < header_max_y:
+            # Check horizontal alignment - allow some leeway but generally left aligned to header or slightly to right
+            if w['x0'] >= header_left: 
+                candidates.append(w)
+
+    lines = group_words_by_line(candidates, tolerance=LINE_Y_TOLERANCE)
+    sorted_y = sorted(lines.keys())
+    
+    table_stop_keywords = ["Antal", "Artikelnr", "Benämning", "A'pris", "Summa", "Rad"]
+
+    for y in sorted_y:
+        line_words = sorted(lines[y], key=lambda w: w['x0'])
+        full_text = " ".join([w['text'] for w in line_words])
+        
+        # Stop if we hit table header
+        if any(k in full_text for k in table_stop_keywords):
+            break
+
+        last_word = line_words[-1]
+        amount = parse_swedish_amount(last_word['text'])
+        
+        if amount is not None:
+            desc_words = line_words[:-1]
+            description = " ".join([w['text'] for w in desc_words])
+            if description:
+                adjustments.append({"beskrivning": description, "belopp": amount})
+            
+    return adjustments
+
 def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Parses header fields from the first page (usually).
@@ -348,5 +406,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['supplier_iban'] = try_extract('iban')
     result['supplier_bic'] = try_extract('bic')
     result['supplier_peppol_id'] = try_extract('peppol_id')
+
+    result['justeringar'] = extract_adjustments(first_page_words)
 
     return result
