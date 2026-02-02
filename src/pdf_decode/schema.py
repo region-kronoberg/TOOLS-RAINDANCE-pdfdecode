@@ -33,6 +33,7 @@ class Totals(BaseModel):
     delsumma_exkl_moms: Optional[float] = None
     moms_belopp: Optional[float] = None
     totalsumma: Optional[float] = None
+    oresavrundning: Optional[float] = None
     valuta: str = "SEK"
 
 class Invoice(BaseModel):

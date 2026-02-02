@@ -386,9 +386,10 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['ocr_nummer'] = try_extract('ocr')
     result['referens'] = try_extract('referens', multiline=True)
     result['referenser'] = try_extract('referenser', left_tolerance=5)
-    result['totalsumma'] = try_extract('totalsumma', parse_swedish_amount, strategy="last")
-    result['moms_belopp'] = try_extract('moms', parse_swedish_amount, max_word_gap=120)
+    result['totalsumma'] = try_extract('totalsumma', parse_swedish_amount, strategy="last", max_word_gap=150)
+    result['moms_belopp'] = try_extract('moms', parse_swedish_amount, strategy="last", max_word_gap=150)
     result['delsumma_exkl_moms'] = try_extract('delsumma', parse_swedish_amount, max_word_gap=150)
+    result['oresavrundning'] = try_extract('oresavrundning', parse_swedish_amount, strategy="last", max_word_gap=150)
     
     # Supplier info (often found via OrgNr or Bankgiro)
     supplier_info = extract_supplier_info(first_page_words)

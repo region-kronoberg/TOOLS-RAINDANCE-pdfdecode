@@ -81,7 +81,8 @@ class InvoiceProcessor:
             totals=Totals(
                 totalsumma=header_data.get('totalsumma'),
                 moms_belopp=header_data.get('moms_belopp'),
-                delsumma_exkl_moms=header_data.get('delsumma_exkl_moms')
+                delsumma_exkl_moms=header_data.get('delsumma_exkl_moms'),
+                oresavrundning=header_data.get('oresavrundning')
             ),
             lines=lines,
             justeringar=[Adjustment(**adj) for adj in header_data.get('justeringar', [])],
