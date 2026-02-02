@@ -469,6 +469,22 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['supplier_bic'] = try_extract('bic')
     result['supplier_peppol_id'] = try_extract('peppol_id')
 
-    result['justeringar'] = extract_adjustments(first_page_words)
+    # Extract adjustments from all pages
+    all_adjustments = []
+    for page in pages_data:
+        page_adjustments = extract_adjustments(page['words'])
+        all_adjustments.extend(page_adjustments)
+    
+    # Remove duplicates based on description and amount?
+    # Simple deduplication
+    unique_adjustments = []
+    seen_adj = set()
+    for adj in all_adjustments:
+        key = (adj['typ'], adj['beskrivning'], adj['belopp'])
+        if key not in seen_adj:
+            seen_adj.add(key)
+            unique_adjustments.append(adj)
+
+    result['justeringar'] = unique_adjustments
 
     return result

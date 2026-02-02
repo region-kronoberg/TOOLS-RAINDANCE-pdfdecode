@@ -24,13 +24,13 @@ ANCHORS = {
 }
 
 HEADER_KEYWORDS = {
-    "rad": ["Rad"],
-    "artikelnr": ["Artikelnr"],
-    "benamning": ["Benämning"],
-    "antal": ["Antal"],
-    "enhet": ["enhet", "enh"], # Keep these as no header column found in example, might need adjustment
-    "a_pris": ["A'pris"],
-    "summa": ["Summa"]
+    "rad": ["Rad", "Pos", "Nr", "Pos."],
+    "artikelnr": ["Artikelnr", "Art.nr", "Artikelnummer", "Art nr", "Artikel"],
+    "benamning": ["Benämning", "Beskrivning", "Text", "Specifikation"],
+    "antal": ["Antal", "Kvantitet", "Lev. ant", "Lev ant"],
+    "enhet": ["enhet", "enh", "Enhet", "Enht"], 
+    "a_pris": ["A'pris", "Ápris", "Pris", "á-pris", "Enh.pris"],
+    "summa": ["Summa", "Belopp", "Totalt"]
 }
 
 # Tolerances

@@ -90,8 +90,17 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
     rows = []
     for y, line_words in sorted_lines:
         row_data: Dict[str, Any] = {}
+
+        # Check for description-only lines that might contain numbers (e.g. "SUMMA JOBB ...")
+        line_full_text = " ".join([w['text'] for w in line_words])
+        force_desc = "SUMMA JOBB" in line_full_text.upper() and 'benamning' in columns
+
         # Assign words to columns
         for word in line_words:
+            if force_desc:
+                current_val = row_data.get('benamning', "")
+                row_data['benamning'] = (current_val + " " + word['text']).strip()
+                continue
             # Use improved check: check overlap with column range or center point
             # Center point is safer for narrow columns
             word_center_x = (word['x0'] + word['x1']) / 2
@@ -209,7 +218,7 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
 
         # Stop if we hit final totals or footer elements
         raw_text = " ".join([w['text'] for w in line_words]).lower()
-        if any(x in raw_text for x in ["att betala", "totalsumma", "er tillgodo", "momsunderlag", "moms"]):
+        if any(x in raw_text for x in ["att betala", "totalsumma", "er tillgodo", "momsunderlag", "varav moms"]):
             break
             
         # Stop on page numbers with strict format (integer / integer)
