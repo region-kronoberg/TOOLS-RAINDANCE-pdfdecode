@@ -249,10 +249,6 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
             # Check raw values for keys to see if they were even present
             # But wait, we parsed them above.
             
-            has_numerics = (curr.get('antal') is not None and curr.get('antal') != 0) or \
-                           (curr.get('a_pris') is not None and curr.get('a_pris') != 0) or \
-                           (curr.get('summa') is not None and curr.get('summa') != 0)
-            
             # For FlexCare, the continuation lines have NO numeric values at all (None).
             # The lines 1, 2, 5, 6, 7 have 0.0 values.
             # So checking for is not None is enough?
