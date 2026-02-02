@@ -43,7 +43,8 @@ class InvoiceProcessor:
                 
                 for r in raw_rows:
                     lines.append(InvoiceLine(
-                        rad=row_counter,
+                        row_no=row_counter,
+                        rad=r.get('rad'),
                         artikelnr=r.get('artikelnr'),
                         benamning=r.get('benamning'),
                         antal=r.get('antal'),

@@ -17,7 +17,8 @@ class Supplier(BaseModel):
     telefon: Optional[str] = None
 
 class InvoiceLine(BaseModel):
-    rad: Optional[int] = None
+    row_no: Optional[int] = None
+    rad: Optional[str] = None
     artikelnr: Optional[str] = None
     benamning: Optional[str] = None
     antal: Optional[float] = None

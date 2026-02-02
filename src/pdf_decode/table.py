@@ -140,7 +140,10 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
                              target_col = 'benamning'
                         # If assigned to Benamning but is clearly a numeric fragment (e.g. '9', '5' from ArtNo)
                         elif target_col == 'benamning' and (txt.isdigit() or txt == '/') and len(txt) < 4:
-                             target_col = 'artikelnr'
+                             # Only move to Artikelnr if Artikelnr already has content (continuation of split)
+                             # This prevents false positives where description starts with a number (e.g. "1 1/2")
+                             if row_data.get('artikelnr'):
+                                 target_col = 'artikelnr'
 
             if target_col:
                 current_val = row_data.get(target_col, "")
@@ -199,19 +202,21 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
         if 'summa' in row_data:
             row_data['summa'] = parse_swedish_amount(row_data['summa'])
         
-        # Filter empty rows or footer noise (e.g. "Att betala" line might be caught)
-        if not row_data.get('benamning') and not row_data.get('summa'):
+        # Filter empty rows or footer noise
+        # A row must have at least one meaningful field
+        if not any(row_data.get(k) for k in ['rad', 'artikelnr', 'benamning', 'summa', 'antal', 'a_pris']):
             continue
-            
-        # Stop if we hit final totals
+
+        # Stop if we hit final totals or footer elements
         raw_text = " ".join([w['text'] for w in line_words]).lower()
-        if "att betala" in raw_text or "totalsumma" in raw_text:
+        if any(x in raw_text for x in ["att betala", "totalsumma", "er tillgodo", "momsunderlag", "moms"]):
             break
             
-        # Skip intermediate summary lines or tax lines
-        # But don't break, as there might be more items after
-        if "moms" in raw_text or "summa jobb" in raw_text:
-            continue
+        # Stop on page numbers with strict format (integer / integer)
+        # e.g. "1 / 2"
+        page_num_match = re.search(r'^\s*\d+\s*/\s*\d+\s*$', raw_text)
+        if page_num_match:
+            break
             
         rows.append(row_data)
     
@@ -224,16 +229,51 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
             prev = merged_rows[-1]
             
             # Check if current row is a continuation
-            # Criteria: has benamning, but NO numeric values (antal, a_pris, summa)
-            has_numerics = curr.get('antal') is not None or curr.get('a_pris') is not None or curr.get('summa') is not None
-            has_benamning = bool(curr.get('benamning'))
+            # Criteria: has text (rad, benamning), but NO numeric values (antal, a_pris, summa)
+            # Make sure we don't merge if the previous row was also empty? No, we want to accumulate text.
+            # But the row must be valid line content.
             
-            if has_benamning and not has_numerics:
+            # Check strictly for emptiness of numeric fields (None or 0 is trickier, usually None or 0.0)
+            # In FlexCare case, valid rows have 0.0 values, invalid/continuation rows have None/missing keys.
+            # `parse_swedish_amount` returns None if missing/empty string.
+            
+            # Check raw values for keys to see if they were even present
+            # But wait, we parsed them above.
+            
+            has_numerics = (curr.get('antal') is not None and curr.get('antal') != 0) or \
+                           (curr.get('a_pris') is not None and curr.get('a_pris') != 0) or \
+                           (curr.get('summa') is not None and curr.get('summa') != 0)
+            
+            # For FlexCare, the continuation lines have NO numeric values at all (None).
+            # The lines 1, 2, 5, 6, 7 have 0.0 values.
+            # So checking for is not None is enough?
+            # Wait, 0.0 is not None.
+            
+            # Continuation line criteria:
+            # 1. No Summa (None) - Summa is the most reliable indicator of a line item.
+            # 2. Has text in rad or benamning.
+            
+            is_continuation = False
+            
+            if curr.get('summa') is None and curr.get('antal') is None:
+                 if curr.get('benamning') or curr.get('rad') or curr.get('artikelnr'):
+                     is_continuation = True
+            
+            if is_continuation:
                 # Merge with previous
-                if prev.get('benamning'):
-                    prev['benamning'] += " " + curr['benamning']
-                else:
-                    prev['benamning'] = curr['benamning']
+                for field in ['rad', 'artikelnr', 'benamning']:
+                    if curr.get(field):
+                        if prev.get(field):
+                            # Special handling for 'rad' if it looks like a suffix (starts with / or -?)
+                            # or just append with space? User wants "MED.../RS..."
+                            separator = "" if curr[field].startswith('/') or curr[field].startswith('-') else " "
+                            prev[field] += separator + curr[field]
+                        else:
+                            prev[field] = curr[field]
+                
+                # Cleanup common OCR/splitting artifacts
+                if prev.get('rad'):
+                     prev['rad'] = prev['rad'].replace('--', '-')
             else:
                 merged_rows.append(curr)
                 

@@ -24,6 +24,7 @@ ANCHORS = {
 }
 
 HEADER_KEYWORDS = {
+    "rad": ["Rad"],
     "artikelnr": ["Artikelnr"],
     "benamning": ["Benämning"],
     "antal": ["Antal"],
