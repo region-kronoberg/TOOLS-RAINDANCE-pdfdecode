@@ -347,8 +347,9 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result = {}
     
     # Helper to try finding a field
-    def try_extract(field_key, parser_func=None, multiline=False, strategy="first", max_word_gap=60, left_tolerance=100):
-        candidates = find_all_anchors(first_page_words, ANCHORS.get(field_key, []))
+    def try_extract(field_key, parser_func=None, multiline=False, strategy="first", max_word_gap=60, left_tolerance=100, max_width=200, max_dist_y=50):
+        anchors_list = ANCHORS.get(field_key, [])
+        candidates = find_all_anchors(first_page_words, anchors_list)
         if strategy == "last":
             candidates = list(reversed(candidates))
             
@@ -370,13 +371,16 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Second Pass: If no value to right, try BELOW
         # Use strategy to pick which anchor to use (first or last)
         if candidates:
-            primary_anchor = candidates[0]
-            val_below = get_text_below(first_page_words, primary_anchor, multiline=multiline, left_tolerance=left_tolerance)
-            
-            if val_below and parser_func:
-                res = parser_func(val_below)
-                return res
-            return val_below if val_below else None
+            for anchor in candidates:
+                val_below = get_text_below(first_page_words, anchor, multiline=multiline, left_tolerance=left_tolerance, max_width=max_width, max_dist_y=max_dist_y)
+                
+                if val_below:
+                    if parser_func:
+                        res = parser_func(val_below)
+                        if res is not None:
+                            return res
+                    else:
+                        return val_below
         
         return None
 
@@ -384,7 +388,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     result['fakturadatum'] = try_extract('fakturadatum', parse_swedish_date)
     result['forfallodatum'] = try_extract('forfallodatum', parse_swedish_date)
     result['ocr_nummer'] = try_extract('ocr')
-    result['referens'] = try_extract('referens', multiline=True)
+    result['referens'] = try_extract('referens', multiline=True, max_width=120)
     result['referenser'] = try_extract('referenser', left_tolerance=5)
     result['totalsumma'] = try_extract('totalsumma', parse_swedish_amount, strategy="last", max_word_gap=150)
     result['moms_belopp'] = try_extract('moms', parse_swedish_amount, strategy="last", max_word_gap=150)

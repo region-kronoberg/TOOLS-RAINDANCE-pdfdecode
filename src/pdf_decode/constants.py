@@ -11,7 +11,7 @@ ANCHORS = {
     "plusgiro": ["plusgiro", "pg"],
     "orgnr": ["Org.nr:"],
     "vat": ["Momsreg.nr:"],
-    "referens": ["Er referens:", "var referens", "referens"],
+    "referens": ["Er referens:", "Er referens", "referens"],
     "referenser": ["referenser"],
     "fakturaperiod": ["fakturaperiod", "period"],
     "part_id": ["PartID:"],
