@@ -299,7 +299,7 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # Sort found headers by vertical position
     found_headers.sort(key=lambda w: (w['top'], w['x0']))
 
-    adjustments = []
+    adjustments: List[Dict[str, Any]] = []
     
     # Track processed Y ranges to avoid overlaps, though simplified logic usually suffices
     # We will process each header
