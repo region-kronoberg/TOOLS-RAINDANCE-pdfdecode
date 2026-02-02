@@ -283,56 +283,113 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Extracts adjustments like "Avgår egenavgift".
     Looks for headers like "Rabatter", "Avgifter", "Övrigt".
     """
-    headers = ["Rabatter", "Avgifter", "Övrigt"]
-    found_header = None
+    target_headers = ["Rabatter", "Avgifter", "Övrigt"]
+    found_headers = []
+
+    # Find all header words
     for w in words:
-        if w['text'] in headers:
-            found_header = w
-            break
-            
-    if not found_header:
-        # Fallback: check normalized text for case insensitivity or substrings
-        for w in words:
-            if any(h.lower() in w['text'].lower() for h in headers):
-                 found_header = w
-                 break
+        # Check essentially exact match, allowing for case and trailing colon
+        text_clean = w['text'].strip(" :").lower()
+        if text_clean in [h.lower() for h in target_headers]:
+            found_headers.append(w)
     
-    if not found_header:
+    if not found_headers:
         return []
+
+    # Sort found headers by vertical position
+    found_headers.sort(key=lambda w: (w['top'], w['x0']))
 
     adjustments = []
     
-    header_left = found_header['x0'] - 20
-    header_max_y = found_header['bottom'] + 200 
-    
-    candidates = []
-    for w in words:
-        if w['top'] > found_header['bottom'] and w['top'] < header_max_y:
-            # Check horizontal alignment - allow some leeway but generally left aligned to header or slightly to right
-            if w['x0'] >= header_left: 
-                candidates.append(w)
-
-    lines = group_words_by_line(candidates, tolerance=LINE_Y_TOLERANCE)
-    sorted_y = sorted(lines.keys())
+    # Track processed Y ranges to avoid overlaps, though simplified logic usually suffices
+    # We will process each header
     
     table_stop_keywords = ["Antal", "Artikelnr", "Benämning", "A'pris", "Summa", "Rad"]
 
-    for y in sorted_y:
-        line_words = sorted(lines[y], key=lambda w: w['x0'])
-        full_text = " ".join([w['text'] for w in line_words])
-        
-        # Stop if we hit table header
-        if any(k in full_text for k in table_stop_keywords):
-            break
+    for header in found_headers:
+        # Determine type
+        header_clean = header['text'].strip(" :")
+        typ = None
+        for h in target_headers:
+            if h.lower() == header_clean.lower():
+                typ = h
+                break
+        if not typ:
+            typ = header_clean.capitalize()
 
-        last_word = line_words[-1]
-        amount = parse_swedish_amount(last_word['text'])
+        header_left = header['x0'] - 20
+        header_right = header['x1'] + 300 # Look bit wider
+        header_bottom = header['bottom']
+        header_max_y = header_bottom + 200 
         
-        if amount is not None:
-            desc_words = line_words[:-1]
-            description = " ".join([w['text'] for w in desc_words])
-            if description:
-                adjustments.append({"beskrivning": description, "belopp": amount})
+        candidates = []
+        for w in words:
+            if w['top'] > header_bottom and w['top'] < header_max_y:
+                if w['x0'] >= header_left and w['x0'] < header_right: 
+                    candidates.append(w)
+
+        if not candidates:
+            continue
+
+        lines = group_words_by_line(candidates, tolerance=LINE_Y_TOLERANCE)
+        sorted_y = sorted(lines.keys())
+        
+        for y in sorted_y:
+            line_words = sorted(lines[y], key=lambda w: w['x0'])
+            full_text = " ".join([w['text'] for w in line_words])
+            
+            # Check if line contains stop words (start of table)
+            if any(k in full_text for k in table_stop_keywords):
+                break
+
+            # Check if this line is just another header
+            clean_line = full_text.strip(" :").lower()
+            if clean_line in [h.lower() for h in target_headers]:
+                break
+
+            last_word = line_words[-1]
+            amount = parse_swedish_amount(last_word['text'])
+            
+            if amount is not None:
+                desc_words = line_words[:-1]
+                if desc_words:
+                    # Filter out words separated by large gaps
+                    # Only keep words that are close to each other, starting from the left (relative to header)
+                    final_desc_words = []
+                    if desc_words:
+                        final_desc_words.append(desc_words[0])
+                        for i in range(1, len(desc_words)):
+                            gap = desc_words[i]['x0'] - desc_words[i-1]['x1']
+                            if gap > 60: # Max gap for description text
+                                break
+                            final_desc_words.append(desc_words[i])
+                    
+                    # Also filter out likely header labels that might have drifted in
+                    stop_labels = ["förfallodatum", "fakturadatum", "ocr-nummer", "ocr"]
+                    clean_words = []
+                    for w in final_desc_words:
+                        if any(s in w['text'].lower() for s in stop_labels):
+                            break
+                        clean_words.append(w)
+                    
+                    if clean_words:
+                        description = " ".join([w['text'] for w in clean_words])
+                        
+                        # Add if not duplicate (same content)
+                        exists = False
+                        for adj in adjustments:
+                            if (adj['typ'] == typ and 
+                                adj['beskrivning'] == description and 
+                                adj['belopp'] == amount):
+                                exists = True
+                                break
+                        
+                        if not exists:
+                            adjustments.append({
+                                "typ": typ,
+                                "beskrivning": description,
+                                "belopp": amount
+                            })
             
     return adjustments
 

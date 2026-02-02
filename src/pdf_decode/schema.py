@@ -27,6 +27,7 @@ class InvoiceLine(BaseModel):
     summa: Optional[float] = None
 
 class Adjustment(BaseModel):
+    typ: Optional[str] = None
     beskrivning: str
     belopp: float
 
