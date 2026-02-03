@@ -401,7 +401,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
         
     first_page_words = pages_data[0]['words']
-    result = {}
+    result: Dict[str, Any] = {}
     
     # Helper to try finding a field
     def try_extract(field_key, parser_func=None, multiline=False, strategy="first", max_word_gap=60, left_tolerance=100, max_width=200, max_dist_y=50):
