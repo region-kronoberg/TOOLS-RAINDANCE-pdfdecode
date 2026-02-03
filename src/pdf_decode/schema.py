@@ -39,6 +39,7 @@ class Totals(BaseModel):
     valuta: str = "SEK"
 
 class Invoice(BaseModel):
+    fakturatyp: str = "Faktura"
     fakturanummer: Optional[str] = None
     fakturadatum: Optional[str] = None # YYYY-MM-DD
     forfallodatum: Optional[str] = None # YYYY-MM-DD

@@ -58,6 +58,7 @@ class InvoiceProcessor:
         invoice = Invoice(
             source_file=pdf_path.name,
             extracted_at=datetime.now().isoformat(),
+            fakturatyp=header_data.get('fakturatyp', 'Faktura'),
             fakturanummer=header_data.get('fakturanummer'),
             fakturadatum=header_data.get('fakturadatum'),
             forfallodatum=header_data.get('forfallodatum'),

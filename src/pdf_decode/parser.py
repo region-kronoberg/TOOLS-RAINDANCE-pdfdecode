@@ -441,6 +441,13 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         
         return None
 
+    # Determine invoice type
+    result['fakturatyp'] = "Faktura"
+    for w in first_page_words:
+        if "Kreditfaktura" in w['text'].replace(" ", ""):
+            result['fakturatyp'] = "Kreditfaktura"
+            break
+
     result['fakturanummer'] = try_extract('fakturanummer')
     result['fakturadatum'] = try_extract('fakturadatum', parse_swedish_date)
     result['forfallodatum'] = try_extract('forfallodatum', parse_swedish_date)
