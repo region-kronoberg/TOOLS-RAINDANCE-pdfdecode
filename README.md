@@ -1,6 +1,6 @@
 # PDF-decode
 
-A robust Python tool for parsing PDF invoices and extracting structured data into JSON format. Specifically designed to handle Swedish invoice formats (AXT e-invoices), it extracts header information, supplier details, line items, and totals.
+A robust Python tool for parsing PDF invoices and extracting structured data into JSON format. Specifically designed to handle Swedish invoice formats (AXT e-invoices produced by Raindance), it extracts header information, supplier details, line items, and totals.
 
 ## Features
 
@@ -74,3 +74,14 @@ To run locally without installing:
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 python3 -m pdf_decode.cli in/ -o out/
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Disclaimer
+
+Raindance is a registered trademark of CGI Inc. This project is an independent open-source tool developed by Region Kronoberg and is not affiliated with, endorsed by, or sponsored by CGI Inc. or the Raindance product owners.
+
+Any use of third-party trademarks, service marks, trade names, or product names, including Raindance, in this project is for informational purposes only to identify the compatibility of this tool.
+

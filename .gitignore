@@ -5,6 +5,5 @@ out/**
 __pycache__/
 *.pyc
 .DS_Store
-__init__.py
 
 .vscode/settings.json
