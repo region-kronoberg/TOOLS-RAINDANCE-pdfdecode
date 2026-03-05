@@ -11,12 +11,112 @@ permissions:
   actions: read
 
 jobs:
-  call-reusable-release:
-    # Only proceed when the build succeeded AND it was triggered by a push (so tags apply)
+  release:
+    name: Create GitHub Release from artifacts
+    runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
-    uses: region-kronoberg/.github/.github/workflows/python-release.yml@main
-    with:
-      run_id:  ${{ github.event.workflow_run.id }}       # pass source run id
-      head_sha: ${{ github.event.workflow_run.head_sha }} # pass source commit SHA
-      # tag_regex: '^v[0-9]+\.[0-9]+\.[0-9]+$'           # optional override
-    secrets: inherit
+
+    steps:
+      - name: Checkout for tag resolution
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for tags
+
+      - name: Ensure tags are fetched
+        run: git fetch --tags --force --prune
+
+      - name: Resolve tag from head_sha
+        id: findtag
+        shell: bash
+        env:
+           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+           TAG_REGEX: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+        run: |
+          set -euo pipefail
+          SHA="$HEAD_SHA"
+          TAG=""
+          
+          # Find a tag pointing at this commit that matches regex
+          for t in $(git tag --points-at "$SHA"); do
+             if [[ "$t" =~ $TAG_REGEX ]]; then
+                TAG="$t"
+                break
+             fi
+          done
+
+          if [[ -n "$TAG" ]]; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG"    >> "$GITHUB_OUTPUT"
+            echo "Detected tag: $TAG"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "No matching tag found for $SHA"
+          fi
+
+      - name: Download artifacts from source run
+        if: steps.findtag.outputs.is_tag == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./artifacts
+
+      - name: Ensure artifacts exist
+        if: steps.findtag.outputs.is_tag == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(artifacts/**/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No artifacts found to attach." >&2
+            exit 1
+          fi
+
+      - name: Create/Update release
+        if: steps.findtag.outputs.is_tag == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.findtag.outputs.tag }}
+          name:     ${{ steps.findtag.outputs.tag }}
+          # body_path: artifacts/python-scripts-assets/assets.md 
+          # append_body: true
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/**/*
+
+      # Workaround for appending body content when creating a new release
+      # softprops/action-gh-release might overwrite body if generate_release_notes is true
+      # This ensures the asset list is appended
+      - name: Append assets list to release notes
+        if: steps.findtag.outputs.is_tag == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const tag = '${{ steps.findtag.outputs.tag }}';
+            const assetsPath = 'artifacts/python-scripts-assets/assets.md';
+            
+            if (fs.existsSync(assetsPath)) {
+              const addition = fs.readFileSync(assetsPath, 'utf8');
+              
+              // Get the release we just created
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                 owner: context.repo.owner,
+                 repo: context.repo.repo,
+                 tag: tag
+              });
+              
+              // Only update if the addition isn't already there (avoid duplication on re-runs)
+              if (release.body && !release.body.includes(JSON.stringify(addition).slice(1,-1).substring(0, 20))) {
+                 await github.rest.repos.updateRelease({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    release_id: release.id,
+                    body: (release.body || "") + "\n\n" + addition
+                 });
+              }
+            }
+
+

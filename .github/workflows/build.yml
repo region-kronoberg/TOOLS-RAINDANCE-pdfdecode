@@ -3,20 +3,146 @@ name: Build (Python)
 on:
   push:
     branches: [ main ]
-    tags: ['v*.*.*']   # run on tags so the reusable workflow can publish releases
+    tags: ['v*.*.*']
   pull_request:
     branches: [ main ]
 
-# Needed so the called workflow can create/update releases
 permissions:
   contents: write
 
 jobs:
   build:
-    uses: region-kronoberg/.github/.github/workflows/python-build.yml@main
-    with:
-      scripts_dir: src        # change if your scripts live elsewhere
-      python_version: "3.12"     # optional override      
-      extra_files: pyproject.toml
-      # extra_dirs: descriptions   # Include entire descriptions directory
-    secrets: inherit             # pass caller’s secrets to the called workflow
+    runs-on: ubuntu-latest
+    env:
+      SCRIPTS_DIR: src
+      PYTHON_VERSION: "3.12"
+      EXTRA_FILES: "pyproject.toml"
+      PYTHONPATH: ${{ github.workspace }}/src
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          
+          REQ=""
+          if [ -f "${SCRIPTS_DIR}/requirements.txt" ]; then
+            REQ="${SCRIPTS_DIR}/requirements.txt"
+          elif [ -f "requirements.txt" ]; then
+            REQ="requirements.txt"
+          else
+            echo "No requirements.txt found — creating empty one for compatibility"
+            touch requirements.txt
+            REQ="requirements.txt"
+          fi
+          
+          echo "Using requirements at: $REQ"
+          pip install -r "$REQ"
+          echo "REQ_PATH=$REQ" >> "$GITHUB_ENV"
+          
+          pip install pytest ruff mypy types-requests
+
+      - name: Lint with Ruff
+        shell: bash
+        run: |
+          TARGETS="$SCRIPTS_DIR"
+          if [ -d tests ]; then TARGETS="$TARGETS tests"; fi
+          ruff check $TARGETS
+
+      - name: Type check with mypy
+        shell: bash
+        run: mypy $SCRIPTS_DIR --ignore-missing-imports
+
+      - name: Run tests
+        shell: bash
+        run: |
+          run_pytest () {
+            pytest -q "$@" || { code=$?; if [ "$code" -ne 5 ]; then exit "$code"; fi; }
+          }
+          if [ -d tests ]; then
+            run_pytest tests
+          elif find "$SCRIPTS_DIR" -type f -name "*test*.py" -print -quit | grep -q .; then
+            run_pytest "$SCRIPTS_DIR"
+          else
+            echo "No tests found"
+          fi
+
+      - name: Package scripts as zip
+        shell: bash
+        run: |
+          set -e
+          mkdir -p dist
+          
+          if [ -d "$SCRIPTS_DIR" ]; then
+            zip -r dist/python-scripts.zip "$SCRIPTS_DIR" -x "*/__pycache__/*"
+          else
+            echo "Error: Directory $SCRIPTS_DIR not found"
+            exit 1
+          fi
+
+          if [ "${REQ_PATH:-}" = "requirements.txt" ] && [ -f requirements.txt ]; then
+            zip dist/python-scripts.zip requirements.txt
+          fi
+          
+          if [ -f README.md ]; then
+            zip dist/python-scripts.zip README.md
+          fi
+          
+          if [ -n "$EXTRA_FILES" ]; then
+            IFS=',' read -ra FILES <<< "$EXTRA_FILES"
+            for f in "${FILES[@]}"; do
+              f=$(echo "$f" | xargs)
+              if [ -f "$f" ]; then
+                zip dist/python-scripts.zip "$f"
+              fi
+            done
+          fi
+
+          if [ -n "$EXTRA_DIRS" ]; then
+            IFS=',' read -ra DIRS <<< "$EXTRA_DIRS"
+            for d in "${DIRS[@]}"; do
+              d=$(echo "$d" | xargs)
+              if [ -d "$d" ]; then
+                zip -r dist/python-scripts.zip "$d" -x "*/__pycache__/*"
+              fi
+            done
+          fi
+
+          unzip -l dist/python-scripts.zip > dist/assets.txt
+          
+          {
+            echo "### Contents of \`python-scripts.zip\`"
+            echo
+            echo '```text'
+            zipinfo -1 dist/python-scripts.zip
+            echo '```'
+          } > dist/assets.md
+
+      - name: Upload script artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-scripts
+          path: dist/python-scripts.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload asset list
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-scripts-assets
+          path: |
+            dist/assets.txt
+            dist/assets.md
+          if-no-files-found: error
+          retention-days: 14
+
