@@ -422,6 +422,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     res = parser_func(val_right)
                     if res is not None:
                         return res
+                    print(f"DEBUG: Failed parsing {field_key} from '{val_right}'")
                 else:
                     return val_right
 
