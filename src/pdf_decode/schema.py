@@ -29,7 +29,7 @@ class InvoiceLine(BaseModel):
 class Adjustment(BaseModel):
     typ: Optional[str] = None
     beskrivning: str
-    belopp: float
+    belopp: Optional[float] = None
 
 class Totals(BaseModel):
     delsumma_exkl_moms: Optional[float] = None

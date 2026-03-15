@@ -318,9 +318,30 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             typ = header_clean.capitalize()
 
         header_left = header['x0'] - 20
-        header_right = header['x1'] + 300 # Look bit wider
         header_bottom = header['bottom']
-        header_max_y = header_bottom + 200 
+        header_max_y = header_bottom + 200
+
+        # Limit search area to stop before the table header row
+        for w in words:
+            if w['top'] > header_bottom and w['text'] in table_stop_keywords:
+                header_max_y = min(header_max_y, w['top'] - 2)
+
+        # Also limit search area to stop before the next header
+        for other_header in found_headers:
+            if other_header['top'] > header['bottom'] + LINE_Y_TOLERANCE:
+                header_max_y = min(header_max_y, other_header['top'] - 2)
+                break
+
+        # Determine right boundary by finding the nearest column to the right on the same line
+        header_y_center = (header['top'] + header['bottom']) / 2
+        next_column_x = None
+        for w in words:
+            w_y_center = (w['top'] + w['bottom']) / 2
+            if abs(w_y_center - header_y_center) < LINE_Y_TOLERANCE:
+                if w['x0'] > header['x1'] + 20:
+                    if next_column_x is None or w['x0'] < next_column_x:
+                        next_column_x = w['x0']
+        header_right = (next_column_x - 5) if next_column_x is not None else (header['x1'] + 200)
         
         candidates = []
         for w in words:
@@ -342,25 +363,30 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if any(k in full_text for k in table_stop_keywords):
                 break
 
-            # Check if this line is just another header
-            clean_line = full_text.strip(" :").lower()
-            if clean_line in [h.lower() for h in target_headers]:
-                break
-
-            last_word = line_words[-1]
-            amount = parse_swedish_amount(last_word['text'])
+            # Try to parse amount from the rightmost words, combining consecutive
+            # numeric tokens that form a single amount with space as thousands separator
+            # e.g. "198" "727,50" -> "198 727,50" -> 198727.50
+            amount = None
+            amount_word_count = 0
+            for n in range(1, min(len(line_words), 4) + 1):
+                combined = " ".join([w['text'] for w in line_words[-n:]])
+                parsed = parse_swedish_amount(combined)
+                if parsed is not None:
+                    # Check that the extra words are purely numeric (digits only)
+                    if n == 1 or all(re.match(r'^\d+$', w['text']) for w in line_words[-n:-1]):
+                        amount = parsed
+                        amount_word_count = n
             
             if amount is not None:
-                desc_words = line_words[:-1]
+                desc_words = line_words[:-amount_word_count]
                 if desc_words:
                     # Filter out words separated by large gaps
-                    # Only keep words that are close to each other, starting from the left (relative to header)
                     final_desc_words = []
                     if desc_words:
                         final_desc_words.append(desc_words[0])
                         for i in range(1, len(desc_words)):
                             gap = desc_words[i]['x0'] - desc_words[i-1]['x1']
-                            if gap > 60: # Max gap for description text
+                            if gap > 60:
                                 break
                             final_desc_words.append(desc_words[i])
                     
