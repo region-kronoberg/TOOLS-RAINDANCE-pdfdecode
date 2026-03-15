@@ -7,8 +7,12 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -21,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -129,7 +133,7 @@ jobs:
           } > dist/assets.md
 
       - name: Upload script artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: python-scripts
           path: dist/python-scripts.zip
@@ -137,7 +141,7 @@ jobs:
           retention-days: 14
 
       - name: Upload asset list
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: python-scripts-assets
           path: |
