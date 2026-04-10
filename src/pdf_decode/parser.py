@@ -1,107 +1,124 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple, Callable
 from .utils import normalize_text, parse_swedish_date, parse_swedish_amount, parse_bankgiro, parse_plusgiro
 from .geometry import group_words_by_line
 from .constants import ANCHORS, LINE_Y_TOLERANCE
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Anchor matching helpers
+# ---------------------------------------------------------------------------
+
+def _build_positioned_text(
+    line_words: List[Dict[str, Any]],
+    transform: Optional[Callable[[str], str]] = None,
+    skip_empty: bool = False,
+) -> Tuple[str, List[Tuple[int, int, Dict[str, Any]]]]:
+    """Build space-joined text from *line_words* with character→word mapping.
+
+    *transform* is applied to each word's text before joining (e.g. ``normalize_text``).
+    If *skip_empty* is ``True``, words whose transformed text is empty are excluded.
+    Returns ``(text, positions)`` where *positions* maps ``[start, end)`` char ranges
+    to the originating word dict.
+    """
+    text = ""
+    positions: List[Tuple[int, int, Dict[str, Any]]] = []
+    for w in line_words:
+        t = transform(w['text']) if transform else w['text']
+        if skip_empty and not t:
+            continue
+        start = len(text)
+        if start > 0:
+            text += " "
+            start += 1
+        text += t
+        end = len(text)
+        positions.append((start, end, w))
+    return text, positions
+
+
+def _word_at_position(
+    positions: List[Tuple[int, int, Dict[str, Any]]], char_idx: int
+) -> Optional[Dict[str, Any]]:
+    """Return the word whose character range contains *char_idx*."""
+    for start, end, word in positions:
+        if start <= char_idx < end:
+            return word
+    return None
+
 
 def find_all_anchors(words: List[Dict[str, Any]], anchor_keys: List[str]) -> List[Dict[str, Any]]:
+    """Find all occurrences of *anchor_keys* in *words*.
+
+    For each key two matching strategies are tried in order:
+    1. **Raw substring match** – preserves case & punctuation (handles
+       ``"Bankgiro:"``, ``"OCR Ref:"`` etc.).
+    2. **Normalized word-boundary match** – case-insensitive with Swedish
+       transliteration (handles ``"referens"``, ``"ocr nummer"`` etc.).
+
+    Returns a list of word dicts (last word of matched phrase), ordered by
+    Y position.
     """
-    Finds all occurrences of anchors. Returns a list of anchor words (last word of the phrase), sorted by Y position.
-    """
-    found_anchors = []
+    found_anchors: List[Dict[str, Any]] = []
     lines = group_words_by_line(words, tolerance=LINE_Y_TOLERANCE)
-    sorted_y = sorted(lines.keys())
-        
-    for y in sorted_y:
-        line_words = lines[y]
-        line_words.sort(key=lambda w: w['x0'])
-        
-        # Build both normalized text and raw text mappings
-        full_text = ""
-        full_raw_text = ""
-        
-        word_map = [] # start, end (normalized)
-        raw_word_map = [] # start, end (raw)
-        
-        for w in line_words:
-            # Normalized construction
-            nt = normalize_text(w['text'])
-            if nt: 
-                start = len(full_text)
-                if start > 0:
-                    full_text += " "
-                    start += 1
-                full_text += nt
-                end = len(full_text)
-                word_map.append((start, end, w))
-            
-            # Raw construction - use exact text but join with space
-            rt = w['text']
-            raw_start = len(full_raw_text)
-            if raw_start > 0:
-                full_raw_text += " "
-                raw_start += 1
-            full_raw_text += rt
-            raw_end = len(full_raw_text)
-            raw_word_map.append((raw_start, raw_end, w))
+
+    for y in sorted(lines.keys()):
+        line_words = sorted(lines[y], key=lambda w: w['x0'])
+
+        raw_text, raw_pos = _build_positioned_text(line_words)
+        norm_text, norm_pos = _build_positioned_text(
+            line_words, transform=normalize_text, skip_empty=True
+        )
 
         for key in anchor_keys:
-            # Check if key requires raw matching (contains punctuation or upper case)
-            use_raw = any(c.isupper() for c in key) or not key.isalnum()
-            # If standard normalization removes necessary chars (like colon), force raw
-            if ":" in key:
-                use_raw = True
-            
-            target_text = full_raw_text if use_raw else full_text
-            target_map = raw_word_map if use_raw else word_map
-            
-            # If raw matching, we might not want \b boundaries if key ends with symbol
-            if use_raw:
-                # Use simple string search or regex without boundaries if needed
-                # For "Bankgiro:", just search literal string
-                try:
-                    # Find all occurrences
-                    start_idx = 0
-                    while True:
-                        idx = target_text.find(key, start_idx)
-                        if idx == -1:
-                            break
-                        
-                        m_end = idx + len(key)
-                        
-                        # Find matched word
-                        target_word = None
-                        for start, end, w in target_map:
-                            if start <= (m_end - 1) < end:
-                                 target_word = w
-                                 break
-                        
-                        if target_word:
-                            found_anchors.append(target_word)
-                        
-                        start_idx = idx + 1
-                except Exception:
-                     pass
+            matched_words: List[Dict[str, Any]] = []
+
+            # Keys with uppercase or colon are format-specific labels
+            # (e.g. "Bankgiro:", "OCR Ref:") → raw substring search first.
+            # All-lowercase keys (e.g. "referens", "ocr") need word-boundary
+            # protection to avoid matching inside longer words → normalized first.
+            prefer_raw = any(c.isupper() for c in key) or ':' in key
+
+            if prefer_raw:
+                # Strategy A — raw substring search, fallback to normalized
+                idx = 0
+                while True:
+                    pos = raw_text.find(key, idx)
+                    if pos == -1:
+                        break
+                    word = _word_at_position(raw_pos, pos + len(key) - 1)
+                    if word:
+                        matched_words.append(word)
+                    idx = pos + 1
+
+                if not matched_words:
+                    norm_key = normalize_text(key)
+                    if norm_key:
+                        pattern = r'\b' + re.escape(norm_key) + r'\b'
+                        for match in re.finditer(pattern, norm_text):
+                            word = _word_at_position(norm_pos, match.end() - 1)
+                            if word:
+                                matched_words.append(word)
             else:
-                # Standard normalized regex search
-                pattern = r'\b' + re.escape(key) + r'\b'
-                for match in re.finditer(pattern, full_text):
-                    m_end = match.end()
-                    target_word = None
-                    for start, end, w in word_map:
-                        if start <= (m_end - 1) < end:
-                             target_word = w
-                             break
-                    
-                    if target_word:
-                        found_anchors.append(target_word)
-                    else: 
-                        # Fallback logic for safety
-                        last_key_part = key.split()[-1]
-                        for word in line_words:
-                             if normalize_text(word['text']) == last_key_part:
-                                 found_anchors.append(word)
-                                 break
+                # Strategy B — normalized word-boundary search only.
+                # No raw fallback: boundary protection is essential for generic
+                # lowercase keys to avoid matching inside longer words
+                # (e.g. "referens" inside "referensränta").
+                norm_key = normalize_text(key)
+                if norm_key:
+                    pattern = r'\b' + re.escape(norm_key) + r'\b'
+                    for match in re.finditer(pattern, norm_text):
+                        word = _word_at_position(norm_pos, match.end() - 1)
+                        if word:
+                            matched_words.append(word)
+
+            for w in matched_words:
+                if w not in found_anchors:
+                    found_anchors.append(w)
+
     return found_anchors
 
 def find_anchor(words: List[Dict[str, Any]], anchor_keys: List[str], strategy: str = "first") -> Optional[Dict[str, Any]]:
@@ -224,19 +241,16 @@ def get_text_below(words: List[Dict[str, Any]], anchor: Dict[str, Any], max_dist
 
 def extract_supplier_info(words: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
     """
-    Extracts supplier name and address by looking above the address block anchors.
-    Returns a dict with 'name' and 'address'.
+    Extracts supplier name and address by looking above the address block anchors
+    (e.g. "Godkänd för F-skatt", "Org.nr:", "Momsreg.nr:").
     """
-    anchors = ["godkand for f skatt", "f skatt", "org nr", "momsreg nr"]
-    found_anchor = None
-    
-    # Find the anchor
-    for word in words:
-        norm_text = normalize_text(word['text'])
-        if any(a in norm_text for a in anchors):
-            found_anchor = word
-            break
-            
+    # Use find_anchor for consistent, phrase-aware matching
+    supplier_anchors = [
+        "Godkänd för F-skatt", "F-skatt", "F skatt",
+        "Org.nr:", "Org.nr", "Momsreg.nr:", "Momsreg.nr",
+    ]
+    found_anchor = find_anchor(words, supplier_anchors, strategy="first")
+
     if not found_anchor:
         return {'name': None, 'address': None}
         
@@ -454,7 +468,7 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     res = parser_func(val_right)
                     if res is not None:
                         return res
-                    print(f"DEBUG: Failed parsing {field_key} from '{val_right}'")
+                    logger.debug("Failed parsing %s from '%s'", field_key, val_right)
                 else:
                     return val_right
 

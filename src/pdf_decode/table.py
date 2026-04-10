@@ -1,8 +1,23 @@
 from typing import List, Dict, Any, Optional
 import re
+import logging
 from .utils import parse_swedish_amount
 from .geometry import group_words_by_line
 from .constants import HEADER_KEYWORDS, LINE_Y_TOLERANCE
+
+logger = logging.getLogger(__name__)
+
+# Sentinel for unbounded column right edge
+_COL_END_SENTINEL = 10_000
+
+# Pixel-distance thresholds for column assignment
+_NUMERIC_SNAP_DISTANCE = 30   # how far left of a column start a digit can be snapped in
+_BOUNDARY_ZONE = 60           # boundary zone around artikelnr/benamning split
+_FRAGMENT_MAX_LEN = 4         # max chars to consider a word a "fragment"
+_INTERLEAVE_MIN_DIGITS = 8    # min digit count to trigger deinterleave heuristic
+
+# Footer / stop keywords
+_TABLE_STOP_PHRASES = ["att betala", "totalsumma", "er tillgodo", "momsunderlag", "varav moms"]
 
 def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
@@ -64,11 +79,178 @@ def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             
         # Last column goes to the right
         last_col = sorted_cols[-1][0]
-        columns[last_col]['end'] = 10000 # Arbitrary large number
+        columns[last_col]['end'] = _COL_END_SENTINEL
         
         return {'top': line_top, 'bottom': line_bottom, 'columns': columns}
         
     return None
+
+def _is_numeric_text(text: str) -> bool:
+    """Check if *text* looks like a pure numeric token (digits, dots, commas)."""
+    return text.replace('.', '').replace(',', '').strip().isdigit()
+
+
+def _snap_numeric_to_column(word: Dict[str, Any], columns: Dict[str, Any], row_data: Dict[str, Any]) -> bool:
+    """Try to snap a numeric word to a nearby numeric column that it's slightly left of.
+
+    Returns ``True`` if the word was assigned.
+    """
+    word_center_x = (word['x0'] + word['x1']) / 2
+    for col_name in ('antal', 'a_pris', 'summa'):
+        if col_name not in columns:
+            continue
+        x_range = columns[col_name]
+        if (x_range['start'] - _NUMERIC_SNAP_DISTANCE) <= word_center_x < x_range['start'] + 5:
+            current_val = row_data.get(col_name, "")
+            row_data[col_name] = (current_val + " " + word['text']).strip()
+            return True
+    return False
+
+
+def _resolve_article_description_boundary(
+    word: Dict[str, Any], target_col: str, columns: Dict[str, Any], row_data: Dict[str, Any]
+) -> str:
+    """Refine column assignment for words near the artikelnr / benämning boundary.
+
+    When PDF character bounding boxes overlap the column split, short text
+    fragments may land in the wrong column.  This nudges them based on
+    whether the fragment is alphabetic (→ benämning) or numeric (→ artikelnr).
+    """
+    if target_col not in ('artikelnr', 'benamning'):
+        return target_col
+    if 'artikelnr' not in columns or 'benamning' not in columns:
+        return target_col
+
+    art_end = columns['artikelnr']['end']
+    if abs(columns['benamning']['start'] - art_end) >= 1:
+        return target_col
+
+    word_center_x = (word['x0'] + word['x1']) / 2
+    if abs(word_center_x - art_end) >= _BOUNDARY_ZONE:
+        return target_col
+
+    txt = word['text'].strip()
+    if len(txt) >= _FRAGMENT_MAX_LEN:
+        return target_col
+
+    if target_col == 'artikelnr' and txt.isalpha():
+        return 'benamning'
+    if target_col == 'benamning' and (txt.isdigit() or txt == '/'):
+        if row_data.get('artikelnr'):
+            return 'artikelnr'
+
+    return target_col
+
+
+def _fix_interleaved_chars(row_data: Dict[str, Any]) -> None:
+    """De-interleave artikelnr and benämning when PDF fragments overlap.
+
+    Handles the case where character-level bounding boxes cause digits from
+    an article number and letters from the description to be mixed together,
+    e.g. artikelnr="40518F9r5e0su3b9i9n8", benämning="e5nergy …".
+    """
+    if 'artikelnr' not in row_data or 'benamning' not in row_data:
+        return
+
+    an = row_data['artikelnr']
+    ben = row_data['benamning']
+    ben_first = ben.split(' ')[0]
+
+    # Only act if the first description word has mixed alpha+digit chars
+    if not (any(c.isdigit() for c in ben_first) and any(c.isalpha() for c in ben_first)):
+        return
+    if not any(c.isalpha() for c in an):
+        return
+
+    cleaned_an = "".join(c for c in an if not c.isalpha())
+    if sum(1 for c in cleaned_an if c.isdigit()) < _INTERLEAVE_MIN_DIGITS:
+        return
+
+    extracted_letters = "".join(c for c in an if c.isalpha())
+    fw_digits = "".join(c for c in ben_first if c.isdigit())
+    fw_letters = "".join(c for c in ben_first if c.isalpha())
+
+    row_data['artikelnr'] = cleaned_an + fw_digits
+    ben_rest = ben[len(ben_first):]
+    row_data['benamning'] = (extracted_letters + " " + fw_letters + ben_rest).strip()
+
+
+def _parse_row_numerics(row_data: Dict[str, Any]) -> None:
+    """Parse antal (with unit extraction), a_pris and summa in *row_data* in-place."""
+    if 'antal' in row_data:
+        match_unit = re.search(
+            r'(?:([A-Za-zåäöÅÄÖ]+(?:/[A-Za-zåäöÅÄÖ]+)?\.?)|(\s-))\s*$',
+            row_data['antal'],
+        )
+        if match_unit:
+            row_data['enhet'] = match_unit.group(0).strip()
+            row_data['antal'] = row_data['antal'][:match_unit.start()] + row_data['antal'][match_unit.end():]
+        row_data['antal'] = parse_swedish_amount(row_data['antal'])
+
+    if 'a_pris' in row_data:
+        row_data['a_pris'] = parse_swedish_amount(row_data['a_pris'])
+
+    if 'summa' in row_data:
+        row_data['summa'] = parse_swedish_amount(row_data['summa'])
+
+
+def _is_table_footer(line_words: List[Dict[str, Any]]) -> bool:
+    """Return ``True`` if the line looks like invoice totals or a page number."""
+    raw_text = " ".join(w['text'] for w in line_words).lower()
+    if any(phrase in raw_text for phrase in _TABLE_STOP_PHRASES):
+        return True
+    # Match page numbers like "1/6", "12/30" but not batch numbers like "286/2511192"
+    m = re.search(r'^\s*(\d+)\s*/\s*(\d+)\s*$', raw_text)
+    if m:
+        page_num = int(m.group(1))
+        page_total = int(m.group(2))
+        if page_num <= page_total and page_total <= 999:
+            return True
+    return False
+
+
+def _merge_continuation_lines(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Merge text-only continuation rows into the preceding data row."""
+    if not rows:
+        return []
+
+    merged: List[Dict[str, Any]] = [rows[0]]
+    for curr in rows[1:]:
+        prev = merged[-1]
+
+        # Drop info-only rows that carry only a_pris (e.g. discount/rebate info)
+        is_apris_only = (
+            curr.get('a_pris') is not None
+            and curr.get('summa') is None
+            and curr.get('antal') is None
+            and not curr.get('benamning')
+            and not curr.get('artikelnr')
+            and not curr.get('rad')
+        )
+        if is_apris_only:
+            continue
+
+        is_continuation = (
+            curr.get('summa') is None
+            and curr.get('antal') is None
+            and (curr.get('benamning') or curr.get('rad') or curr.get('artikelnr'))
+        )
+
+        if is_continuation:
+            for field in ('rad', 'artikelnr', 'benamning'):
+                if curr.get(field):
+                    if prev.get(field):
+                        separator = "" if curr[field].startswith('/') or curr[field].startswith('-') else " "
+                        prev[field] += separator + curr[field]
+                    else:
+                        prev[field] = curr[field]
+            if prev.get('rad'):
+                prev['rad'] = prev['rad'].replace('--', '-')
+        else:
+            merged.append(curr)
+
+    return merged
+
 
 def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any], start_y: Optional[float] = None) -> List[Dict[str, Any]]:
     """
@@ -77,209 +259,64 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
     """
     table_top = start_y if start_y is not None else header_info['bottom']
     columns = header_info['columns']
-    
-    # Filter words below header
+
+    # Filter words below header and group by line
     table_words = [w for w in words if w['top'] > table_top]
-    
-    # Group by line
     lines_dict = group_words_by_line(table_words, tolerance=LINE_Y_TOLERANCE)
-            
-    # Sort lines by Y
     sorted_lines = sorted(lines_dict.items(), key=lambda x: x[0])
-    
-    rows = []
-    for y, line_words in sorted_lines:
+
+    rows: List[Dict[str, Any]] = []
+    for _y, line_words in sorted_lines:
         row_data: Dict[str, Any] = {}
 
-        # Check for description-only lines that might contain numbers (e.g. "SUMMA JOBB ...")
-        line_full_text = " ".join([w['text'] for w in line_words])
+        # Force all words into description for "SUMMA JOBB …" lines
+        line_full_text = " ".join(w['text'] for w in line_words)
         force_desc = "SUMMA JOBB" in line_full_text.upper() and 'benamning' in columns
 
-        # Assign words to columns
+        # --- assign words to columns ---
         for word in line_words:
             if force_desc:
                 current_val = row_data.get('benamning', "")
                 row_data['benamning'] = (current_val + " " + word['text']).strip()
                 continue
-            # Use improved check: check overlap with column range or center point
-            # Center point is safer for narrow columns
+
             word_center_x = (word['x0'] + word['x1']) / 2
-            
             assigned = False
-            
-            # Pre-emptive numeric check for misaligned columns (like Antal)
-            # Prioritize assigning numeric values to Antal/A-pris if they are close to the left edge
-            if word['text'].replace('.','').replace(',','').strip().isdigit():
-                 for col_name in ['antal', 'a_pris', 'summa']:
-                    if col_name in columns:
-                        x_range = columns[col_name]
-                        # If word is within 30pts left of start, grab it. +5 to allow slight overlap into column.
-                        if (x_range['start'] - 30) <= word_center_x < x_range['start'] + 5:
-                            current_val = row_data.get(col_name, "")
-                            row_data[col_name] = (current_val + " " + word['text']).strip()
-                            assigned = True
-                            break
-            
+
+            # Snap misaligned numeric words to nearby numeric columns
+            if _is_numeric_text(word['text']):
+                assigned = _snap_numeric_to_column(word, columns, row_data)
+
             if assigned:
                 continue
 
+            # Standard column lookup by center-x
             target_col = None
             for col_name, x_range in columns.items():
-                # Allow a small tolerance for column boundaries?
-                # Using 0 tolerance for strictness since headers define start
                 if x_range['start'] <= word_center_x < x_range['end']:
                     target_col = col_name
                     break
-            
-            # Fix for overlapping Article Number and Description
-            # If we have interleaved fragments near the boundary, separate them by type.
-            if target_col in ['artikelnr', 'benamning'] and 'artikelnr' in columns and 'benamning' in columns:
-                art_end = columns['artikelnr']['end']
-                
-                # Only apply if Benamning actually follows Artikelnr (adjacent)
-                if abs(columns['benamning']['start'] - art_end) < 1:
-                    dist = abs(word_center_x - art_end)
-                    
-                    # If within 60pt of the boundary
-                    if dist < 60:
-                        txt = word['text'].strip()
-                        # If assigned to ArtNr but is clearly a text fragment (e.g. 'F', 'r', 'e' from Fresubin)
-                        # Length < 4 to capture fragments
-                        if target_col == 'artikelnr' and txt.isalpha() and len(txt) < 4:
-                             target_col = 'benamning'
-                        # If assigned to Benamning but is clearly a numeric fragment (e.g. '9', '5' from ArtNo)
-                        elif target_col == 'benamning' and (txt.isdigit() or txt == '/') and len(txt) < 4:
-                             # Only move to Artikelnr if Artikelnr already has content (continuation of split)
-                             # This prevents false positives where description starts with a number (e.g. "1 1/2")
-                             if row_data.get('artikelnr'):
-                                 target_col = 'artikelnr'
 
+            # Refine near the artikelnr / benämning boundary
             if target_col:
+                target_col = _resolve_article_description_boundary(word, target_col, columns, row_data)
                 current_val = row_data.get(target_col, "")
                 row_data[target_col] = (current_val + " " + word['text']).strip()
-                assigned = True
-            
-            # Fallback for "antal" and "a_pris" overlapping?
-            # Handled by pre-emptive numeric check above.
-            
-            # Fallback: if not assigned (maybe left of first col?), add to first col if it's description
-            if not assigned and 'benamning' in columns:
-                 # Heuristic: if it's close to benamning
-                 pass 
 
-        # Clean up overlap between artikelnr and benamning where chars are interleaved
-        # e.g. ArtNr: "40518F9r5e0su3b9i9n8" (Fresubin interleaved with digits)
-        #      Ben: "e5nergy ..." (Digit 5 embedded in energy)
-        if 'artikelnr' in row_data and 'benamning' in row_data:
-            an = row_data['artikelnr']
-            ben = row_data['benamning']
-            
-            ben_first = ben.split(' ')[0]
-            # Check if Benamning start word is corrupted with digits (e.g. e5nergy)
-            if any(c.isdigit() for c in ben_first) and any(c.isalpha() for c in ben_first):
-                # Check if Artikelnr has letters (intruders)
-                if any(c.isalpha() for c in an):
-                    cleaned_an = "".join([c for c in an if not c.isalpha()])
-                    # Safety check: ArtNr should be substantial (likely barcodes)
-                    count_digits = sum(1 for c in cleaned_an if c.isdigit())
-                    
-                    if count_digits >= 8:
-                        extracted_letters = "".join([c for c in an if c.isalpha()])
-                        fw_digits = "".join([c for c in ben_first if c.isdigit()])
-                        fw_letters = "".join([c for c in ben_first if c.isalpha()])
-                        
-                        row_data['artikelnr'] = cleaned_an + fw_digits
-                        
-                        ben_rest = ben[len(ben_first):]
-                        row_data['benamning'] = (extracted_letters + " " + fw_letters + ben_rest).strip()
+        # De-interleave overlapping artikelnr / benämning fragments
+        _fix_interleaved_chars(row_data)
 
-        # Parse numeric fields
-        if 'antal' in row_data:
-            # Extract unit from antal string before parsing number
-            # Look for suffix like "KG", "TIM", "st", "M3" (handling alphanumeric if needed, but usually letters)
-            # Assuming unit is mainly alphabetic characters
-            # Also accept "-" as unit if it is separated by space (to distinguish from negative numbers like 5-)
-            match_unit = re.search(r'(?:([A-Za-zåäöÅÄÖ]+(?:/[A-Za-zåäöÅÄÖ]+)?\.?)|(\s-))\s*$', row_data['antal'])
-            if match_unit:
-                 row_data['enhet'] = match_unit.group(0).strip()
-                 # Remove the unit from the string
-                 row_data['antal'] = row_data['antal'][:match_unit.start()] + row_data['antal'][match_unit.end():]
-            
-            row_data['antal'] = parse_swedish_amount(row_data['antal'])
-        if 'a_pris' in row_data:
-            row_data['a_pris'] = parse_swedish_amount(row_data['a_pris'])
-        if 'summa' in row_data:
-            row_data['summa'] = parse_swedish_amount(row_data['summa'])
-        
-        # Filter empty rows or footer noise
-        # A row must have at least one meaningful field
-        if not any(row_data.get(k) for k in ['rad', 'artikelnr', 'benamning', 'summa', 'antal', 'a_pris']):
+        # Parse numeric fields & extract unit from antal
+        _parse_row_numerics(row_data)
+
+        # Skip empty rows
+        if not any(row_data.get(k) for k in ('rad', 'artikelnr', 'benamning', 'summa', 'antal', 'a_pris')):
             continue
 
-        # Stop if we hit final totals or footer elements
-        raw_text = " ".join([w['text'] for w in line_words]).lower()
-        if any(x in raw_text for x in ["att betala", "totalsumma", "er tillgodo", "momsunderlag", "varav moms"]):
+        # Stop at footer / totals
+        if _is_table_footer(line_words):
             break
-            
-        # Stop on page numbers with strict format (integer / integer)
-        # e.g. "1 / 2"
-        page_num_match = re.search(r'^\s*\d+\s*/\s*\d+\s*$', raw_text)
-        if page_num_match:
-            break
-            
+
         rows.append(row_data)
-    
-    # Post-process to merge continuation lines
-    merged_rows = []
-    if rows:
-        merged_rows.append(rows[0])
-        for i in range(1, len(rows)):
-            curr = rows[i]
-            prev = merged_rows[-1]
-            
-            # Check if current row is a continuation
-            # Criteria: has text (rad, benamning), but NO numeric values (antal, a_pris, summa)
-            # Make sure we don't merge if the previous row was also empty? No, we want to accumulate text.
-            # But the row must be valid line content.
-            
-            # Check strictly for emptiness of numeric fields (None or 0 is trickier, usually None or 0.0)
-            # In FlexCare case, valid rows have 0.0 values, invalid/continuation rows have None/missing keys.
-            # `parse_swedish_amount` returns None if missing/empty string.
-            
-            # Check raw values for keys to see if they were even present
-            # But wait, we parsed them above.
-            
-            # For FlexCare, the continuation lines have NO numeric values at all (None).
-            # The lines 1, 2, 5, 6, 7 have 0.0 values.
-            # So checking for is not None is enough?
-            # Wait, 0.0 is not None.
-            
-            # Continuation line criteria:
-            # 1. No Summa (None) - Summa is the most reliable indicator of a line item.
-            # 2. Has text in rad or benamning.
-            
-            is_continuation = False
-            
-            if curr.get('summa') is None and curr.get('antal') is None:
-                 if curr.get('benamning') or curr.get('rad') or curr.get('artikelnr'):
-                     is_continuation = True
-            
-            if is_continuation:
-                # Merge with previous
-                for field in ['rad', 'artikelnr', 'benamning']:
-                    if curr.get(field):
-                        if prev.get(field):
-                            # Special handling for 'rad' if it looks like a suffix (starts with / or -?)
-                            # or just append with space? User wants "MED.../RS..."
-                            separator = "" if curr[field].startswith('/') or curr[field].startswith('-') else " "
-                            prev[field] += separator + curr[field]
-                        else:
-                            prev[field] = curr[field]
-                
-                # Cleanup common OCR/splitting artifacts
-                if prev.get('rad'):
-                     prev['rad'] = prev['rad'].replace('--', '-')
-            else:
-                merged_rows.append(curr)
-                
-    return merged_rows
+
+    return _merge_continuation_lines(rows)

@@ -31,29 +31,13 @@ def parse_swedish_amount(text: str) -> Optional[float]:
     
     # Look for X,XX or X,X
     matches = re.findall(r'-?[\d\s\.]+,[\d]{1,2}-?', text)
-    
-    candidate = None
     if matches:
-        # Pick the longest match or the one that isn't a percentage?
-        # Usually the amount is the most significant number.
-        # If we have "25% 10 059,00", matches might be ["10 059,00"] (since 25% has no comma)
-        # If we have "10,5%", match is "10,5".
-        
-        # Let's try to parse each match and see.
         for m in matches:
-            # Clean the match
             val = _parse_clean_amount(m)
             if val is not None:
-                # Return the first valid amount found.
-                # This is usually the one associated with the label if it's close.
                 return val
-        
-        if candidate is not None:
-            return candidate
 
     # If no comma pattern found, try simpler integer pattern
-    # But be careful of dates, phone numbers etc.
-    # If the text is just digits, it's fine.
     clean_text = re.sub(r'[^\d,\.\-\s]', '', text).strip()
     return _parse_clean_amount(clean_text)
 
