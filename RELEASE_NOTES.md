@@ -1,5 +1,22 @@
 # Release Notes
 
+## v1.1.2 (2026-04-10)
+
+### Felrättningar
+*   **Filtrering av info-rader med enbart a_pris**: Rader som enbart innehåller ett `a_pris`-värde (utan summa, antal eller text) tolkas nu som informationsrader (t.ex. rabattinfo på OK-Q8-fakturor) och filtreras bort istället för att generera tomma fakturarader.
+*   **Sidfotsdetektering**: Sidnummer på formatet "1/6" hanteras nu korrekt som sidfot, utan att felaktigt matcha batchnummer som "286/2511192".
+*   **Justeringar begränsas av sektionsgränser**: Sökområdet för justeringar (t.ex. "Frakt", "Öresavrundning") stoppas nu även vid sektioner som "Notering" och "Betalningsvillkor" för att undvika felaktiga träffar.
+
+### Förbättringar
+*   **Förbättrad radgruppering**: `group_words_by_line` använder nu närmaste matchning istället för första träff, vilket ger korrekta rader när textlinjer ligger nära varandra.
+*   **Robustare ankarmatchning**: Refaktorerad `find_all_anchors` med tvåstegs-strategi – rå substrängsökning för formatspecifika etiketter (t.ex. "Bankgiro:") och normaliserad ordgränssökning för generiska nycklar (t.ex. "referens"). Förhindrar felaktiga delträffar.
+*   **Leverantörsextrahering**: `extract_supplier_info` använder nu `find_anchor` för konsekvent fras-matchning av ankarord som "Godkänd för F-skatt" och "Org.nr:".
+*   **Refaktorering av tabellparsning**: Extraherat hjälpfunktioner (`_snap_numeric_to_column`, `_resolve_article_description_boundary`, `_fix_interleaved_chars`, `_parse_row_numerics`, `_is_table_footer`) och ersatt magiska tal med namngivna konstanter.
+
+### Övrigt
+*   Lade till regressionstester som jämför parserns utdata mot referens-JSON.
+*   Ersatte `print`-debug med `logging`.
+
 ## v1.1.1 (2026-03-15)
 
 ### Felrättningar
