@@ -305,6 +305,7 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # We will process each header
     
     table_stop_keywords = ["Antal", "Artikelnr", "Benämning", "A'pris", "Summa", "Rad"]
+    section_stop_keywords = ["Notering", "Betalningsvillkor"]
 
     for header in found_headers:
         # Determine type
@@ -324,6 +325,11 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         # Limit search area to stop before the table header row
         for w in words:
             if w['top'] > header_bottom and w['text'] in table_stop_keywords:
+                header_max_y = min(header_max_y, w['top'] - 2)
+
+        # Limit search area to stop before Notering/Betalningsvillkor sections
+        for w in words:
+            if w['top'] > header_bottom and w['text'] in section_stop_keywords:
                 header_max_y = min(header_max_y, w['top'] - 2)
 
         # Also limit search area to stop before the next header
