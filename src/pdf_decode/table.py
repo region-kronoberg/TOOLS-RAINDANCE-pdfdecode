@@ -86,8 +86,14 @@ def find_table_header(words: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return None
 
 def _is_numeric_text(text: str) -> bool:
-    """Check if *text* looks like a pure numeric token (digits, dots, commas)."""
-    return text.replace('.', '').replace(',', '').strip().isdigit()
+    """Check if *text* looks like a pure numeric token (digits, dots, commas,
+    optionally with a leading or trailing minus sign)."""
+    stripped = text.replace('.', '').replace(',', '').strip()
+    if stripped.startswith('-'):
+        stripped = stripped[1:]
+    if stripped.endswith('-'):
+        stripped = stripped[:-1]
+    return stripped.isdigit()
 
 
 def _snap_numeric_to_column(word: Dict[str, Any], columns: Dict[str, Any], row_data: Dict[str, Any]) -> bool:
