@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.1.3 (2026-04-21)
+
+### Felrättningar
+*   **Negativa belopp i tabellrader**: Rader med negativa värden (t.ex. kreditrader/introduktionsavdrag som `-4,00 HUR` och `-2 860,00`) tolkas nu korrekt. Tidigare placerades minustecknet i fel kolumn – `antal` blev `null`, minustecknet hamnade i `benamning` och `summa` fick fel tecken. `_is_numeric_text` i `table.py` accepterar nu ledande och eftersläpande minustecken, så snap-logiken för numeriska kolumner fungerar även för negativa tal.
+
 ## v1.1.2 (2026-04-10)
 
 ### Felrättningar
