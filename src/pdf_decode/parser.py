@@ -321,6 +321,19 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     table_stop_keywords = ["Antal", "Artikelnr", "Benämning", "A'pris", "Summa", "Rad"]
     section_stop_keywords = ["Notering", "Betalningsvillkor"]
 
+    # Detect the table header row(s) by finding lines that contain *multiple*
+    # column-header keywords. A single "Summa" appearing in adjustment text
+    # (e.g. "Summa Legeringstillägg") must not be treated as the table header.
+    table_header_ys: List[float] = []
+    table_header_lines = group_words_by_line(
+        [w for w in words if w['text'] in table_stop_keywords],
+        tolerance=LINE_Y_TOLERANCE,
+    )
+    for y, lw in table_header_lines.items():
+        distinct = {w['text'] for w in lw}
+        if len(distinct) >= 3:
+            table_header_ys.append(min(w['top'] for w in lw))
+
     for header in found_headers:
         # Determine type
         header_clean = header['text'].strip(" :")
@@ -337,9 +350,9 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         header_max_y = header_bottom + 200
 
         # Limit search area to stop before the table header row
-        for w in words:
-            if w['top'] > header_bottom and w['text'] in table_stop_keywords:
-                header_max_y = min(header_max_y, w['top'] - 2)
+        for y_top in table_header_ys:
+            if y_top > header_bottom:
+                header_max_y = min(header_max_y, y_top - 2)
 
         # Limit search area to stop before Notering/Betalningsvillkor sections
         for w in words:
@@ -378,9 +391,10 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         for y in sorted_y:
             line_words = sorted(lines[y], key=lambda w: w['x0'])
             full_text = " ".join([w['text'] for w in line_words])
-            
-            # Check if line contains stop words (start of table)
-            if any(k in full_text for k in table_stop_keywords):
+
+            # Check if line is the table header row (contains multiple column headers)
+            distinct_stop = {w['text'] for w in line_words if w['text'] in table_stop_keywords}
+            if len(distinct_stop) >= 3:
                 break
 
             # Try to parse amount from the rightmost words, combining consecutive
