@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.1.4 (2026-04-23)
+
+### Felrättningar
+*   **Justeringar i nytt fakturaformat**: Avgifter/Rabatter som i det nya formatet placerats i mittenkolumnen (t.ex. `Summa Legeringstillägg 26,06` och `RÅVARUTILLÄGG 14,07`) extraheras nu korrekt. Tidigare sattes sökområdets nedre gräns precis under rubriken "Avgifter" eftersom ordet "Summa" i raden `Summa Legeringstillägg` matchade mot tabellens kolumnrubrik. Tabellhuvudet detekteras nu som en rad som innehåller minst tre distinkta kolumnrubriker (t.ex. Rad + Artikelnr + Benämning), istället för att stoppa vid ett enskilt tvetydigt ord.
+
 ## v1.1.3 (2026-04-21)
 
 ### Felrättningar
