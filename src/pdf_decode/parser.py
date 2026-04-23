@@ -390,7 +390,6 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         
         for y in sorted_y:
             line_words = sorted(lines[y], key=lambda w: w['x0'])
-            full_text = " ".join([w['text'] for w in line_words])
 
             # Check if line is the table header row (contains multiple column headers)
             distinct_stop = {w['text'] for w in line_words if w['text'] in table_stop_keywords}

@@ -17,6 +17,11 @@ dependencies = [
     "click>=8.1.0"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.15.11"
+]
+
 [project.scripts]
 pdf-decode = "pdf_decode.cli:main"
 
