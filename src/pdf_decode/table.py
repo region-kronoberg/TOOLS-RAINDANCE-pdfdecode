@@ -142,7 +142,11 @@ def _resolve_article_description_boundary(
     if target_col == 'artikelnr' and txt.isalpha():
         return 'benamning'
     if target_col == 'benamning' and (txt.isdigit() or txt == '/'):
-        if row_data.get('artikelnr'):
+        # Only push digits/slashes back into artikelnr if the description
+        # has not started yet on this line. Otherwise a digit that legitimately
+        # belongs inside the description (e.g. "FS LIBRE 2 PLUS …") would be
+        # appended to artikelnr.
+        if row_data.get('artikelnr') and not row_data.get('benamning'):
             return 'artikelnr'
 
     return target_col
