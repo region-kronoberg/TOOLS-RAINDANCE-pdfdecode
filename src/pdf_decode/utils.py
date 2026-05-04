@@ -1,9 +1,13 @@
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
-def parse_swedish_amount(text: str) -> Optional[float]:
+def parse_swedish_amount(text: str) -> Optional[Decimal]:
     """
-    Parses a Swedish amount string (e.g., "1 234,50", "1.234,50", "1234,50-") into a float.
+    Parses a Swedish amount string (e.g., "1 234,50", "1.234,50", "1234,50-") into a Decimal.
+    Decimal is used (not float) because amounts are monetary values where binary
+    floating-point representation introduces silent rounding errors and breaks
+    sum/total reconciliation.
     Returns None if parsing fails.
     """
     if not text:
@@ -41,7 +45,7 @@ def parse_swedish_amount(text: str) -> Optional[float]:
     clean_text = re.sub(r'[^\d,\.\-\s]', '', text).strip()
     return _parse_clean_amount(clean_text)
 
-def _parse_clean_amount(text: str) -> Optional[float]:
+def _parse_clean_amount(text: str) -> Optional[Decimal]:
     clean_text = text.strip()
     is_negative = False
     if clean_text.endswith('-'):
@@ -57,17 +61,21 @@ def _parse_clean_amount(text: str) -> Optional[float]:
             return None
         integer_part = re.sub(r'[\s\.]', '', parts[0])
         decimal_part = re.sub(r'\D', '', parts[1]) # Remove any trailing non-digits
+        if not integer_part or not decimal_part:
+            return None
         try:
-            val = float(f"{integer_part}.{decimal_part}")
+            val = Decimal(f"{integer_part}.{decimal_part}")
             return -val if is_negative else val
-        except ValueError:
+        except InvalidOperation:
             return None
     else:
         clean_text_no_space = re.sub(r'\s', '', clean_text)
+        if not clean_text_no_space:
+            return None
         try:
-            val = float(clean_text_no_space)
+            val = Decimal(clean_text_no_space)
             return -val if is_negative else val
-        except ValueError:
+        except InvalidOperation:
             return None
 
 

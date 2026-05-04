@@ -102,18 +102,6 @@ def find_all_anchors(words: List[Dict[str, Any]], anchor_keys: List[str]) -> Lis
                             word = _word_at_position(norm_pos, match.end() - 1)
                             if word:
                                 matched_words.append(word)
-            else:
-                # Strategy B — normalized word-boundary search only.
-                # No raw fallback: boundary protection is essential for generic
-                # lowercase keys to avoid matching inside longer words
-                # (e.g. "referens" inside "referensränta").
-                norm_key = normalize_text(key)
-                if norm_key:
-                    pattern = r'\b' + re.escape(norm_key) + r'\b'
-                    for match in re.finditer(pattern, norm_text):
-                        word = _word_at_position(norm_pos, match.end() - 1)
-                        if word:
-                            matched_words.append(word)
 
             for w in matched_words:
                 if w not in found_anchors:

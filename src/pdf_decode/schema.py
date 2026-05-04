@@ -1,5 +1,12 @@
+from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
+
+# Monetary values are stored as Decimal to avoid binary floating-point
+# representation errors. They are serialized as JSON numbers (via float) so
+# that existing consumers continue to receive numeric output. Internal Python
+# code can rely on exact decimal arithmetic where needed (e.g. reconciling
+# sum-of-lines against totals).
 
 class Supplier(BaseModel):
     namn: Optional[str] = None
@@ -21,22 +28,34 @@ class InvoiceLine(BaseModel):
     rad: Optional[str] = None
     artikelnr: Optional[str] = None
     benamning: Optional[str] = None
-    antal: Optional[float] = None
+    antal: Optional[Decimal] = None
     enhet: Optional[str] = None
-    a_pris: Optional[float] = None
-    summa: Optional[float] = None
+    a_pris: Optional[Decimal] = None
+    summa: Optional[Decimal] = None
+
+    @field_serializer('antal', 'a_pris', 'summa', when_used='json')
+    def _ser_decimal(self, v: Optional[Decimal]) -> Optional[float]:
+        return float(v) if v is not None else None
 
 class Adjustment(BaseModel):
     typ: Optional[str] = None
     beskrivning: str
-    belopp: Optional[float] = None
+    belopp: Optional[Decimal] = None
+
+    @field_serializer('belopp', when_used='json')
+    def _ser_decimal(self, v: Optional[Decimal]) -> Optional[float]:
+        return float(v) if v is not None else None
 
 class Totals(BaseModel):
-    delsumma_exkl_moms: Optional[float] = None
-    moms_belopp: Optional[float] = None
-    totalsumma: Optional[float] = None
-    oresavrundning: Optional[float] = None
+    delsumma_exkl_moms: Optional[Decimal] = None
+    moms_belopp: Optional[Decimal] = None
+    totalsumma: Optional[Decimal] = None
+    oresavrundning: Optional[Decimal] = None
     valuta: str = "SEK"
+
+    @field_serializer('delsumma_exkl_moms', 'moms_belopp', 'totalsumma', 'oresavrundning', when_used='json')
+    def _ser_decimal(self, v: Optional[Decimal]) -> Optional[float]:
+        return float(v) if v is not None else None
 
 class Invoice(BaseModel):
     fakturatyp: str = "Faktura"
@@ -57,3 +76,18 @@ class Invoice(BaseModel):
     source_file: str
     extracted_at: str
     raw_extraction: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_serializer('raw_extraction', when_used='json')
+    def _ser_raw(self, v: Dict[str, Any]) -> Dict[str, Any]:
+        # raw_extraction is typed as Any, so Decimal values inside it would be
+        # serialized as strings by default. Convert recursively to keep JSON
+        # numeric form consistent with the typed monetary fields.
+        def _conv(x: Any) -> Any:
+            if isinstance(x, Decimal):
+                return float(x)
+            if isinstance(x, dict):
+                return {k: _conv(val) for k, val in x.items()}
+            if isinstance(x, list):
+                return [_conv(i) for i in x]
+            return x
+        return _conv(v)
