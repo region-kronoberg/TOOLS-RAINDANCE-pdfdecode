@@ -387,9 +387,16 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             # Try to parse amount from the rightmost words, combining consecutive
             # numeric tokens that form a single amount with space as thousands separator
             # e.g. "198" "727,50" -> "198 727,50" -> 198727.50
+            # A valid amount token must consist only of digits, spaces, commas,
+            # periods and an optional leading/trailing minus — no letters, %, ) etc.
+            _AMOUNT_TOKEN_RE = re.compile(r'^-?[\d\s.,]+-?$')
+
             amount = None
             amount_word_count = 0
             for n in range(1, min(len(line_words), 4) + 1):
+                # All candidate tokens must look like numeric material
+                if not all(_AMOUNT_TOKEN_RE.match(w['text']) for w in line_words[-n:]):
+                    continue
                 combined = " ".join([w['text'] for w in line_words[-n:]])
                 parsed = parse_swedish_amount(combined)
                 if parsed is not None:
@@ -437,6 +444,18 @@ def extract_adjustments(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                                 "beskrivning": description,
                                 "belopp": amount
                             })
+            else:
+                # No amount found — treat as a continuation of the previous adjustment's
+                # description (e.g. "Paket (momssats 25%)" following "Drivmedelstillägg**,")
+                if line_words and adjustments and adjustments[-1]['typ'] == typ:
+                    cont_words = [line_words[0]]
+                    for i in range(1, len(line_words)):
+                        gap = line_words[i]['x0'] - line_words[i - 1]['x1']
+                        if gap > 60:
+                            break
+                        cont_words.append(line_words[i])
+                    cont_text = " ".join(w['text'] for w in cont_words)
+                    adjustments[-1]['beskrivning'] += " " + cont_text
             
     return adjustments
 
