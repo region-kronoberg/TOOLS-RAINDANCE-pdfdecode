@@ -1,5 +1,21 @@
 # Release Notes
 
+## v1.1.6 (2026-05-04)
+
+### Felrättningar
+*   **Justeringar med flerrads-beskrivning**: Avgifter/rabatter vars namn bryts över flera rader (t.ex. `"Drivmedelstillägg**, Paket (momssats 25%)"`) slås nu ihop till en enda post med korrekt beskrivning och belopp. Tidigare skapades felaktiga delposter där t.ex. `"Paket (momssats"` tolkades som en separat justering med beloppet 25,00.
+*   **Striktare beloppstolkning i justeringssektionen**: Tokens som innehåller bokstäver, `%`, `)` eller andra icke-numeriska tecken avvisas nu direkt som beloppskandidater, innan `parse_swedish_amount` anropas. Tidigare kunde `25%` tolkas som beloppet 25,00.
+
+### Förbättringar
+*   **Förbättrad CLI-felhantering**: Nytt flagga `-v`/`-vv` för att styra loggnivå (INFO/DEBUG) med fullständiga stack traces vid fel. Felmeddelanden skrivs nu till stderr. Utdatakatalogen skapas rekursivt (`mkdir -p`). Filer sorteras för deterministisk körningsordning. Avslutar med exitkod 1 om någon fil misslyckades.
+*   **Monetära värden som `Decimal`**: Alla belopps­fält (`a_pris`, `summa`, `moms_belopp`, `totalsumma` m.fl.) lagras nu internt som `Decimal` istället för `float` för att undvika binär flyttalsavrundning. JSON-utdata är oförändrad (numeriska värden).
+*   **Developer Guide**: Lade till `DEVELOPER_GUIDE.md` med arkitekturöversikt, konventioner och vägledning för att lägga till stöd för nya fakturaformat.
+
+## v1.1.5 (2026-04-28)
+
+### Felrättningar
+*   **Felaktig tilldelning av siffror till `artikelnr`**: Siffror och `/` som förekommer *inuti* en artikelbeskrivning (t.ex. `"FS LIBRE 2 PLUS …"`) tilldelades felaktigt `artikelnr` i stället för att stanna i `benamning`. Gränsen för omplacering gäller nu bara när `benamning` ännu inte påbörjats på raden.
+
 ## v1.1.4 (2026-04-23)
 
 ### Felrättningar
