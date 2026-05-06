@@ -31,9 +31,14 @@ A robust Python tool for parsing PDF invoices and extracting structured data int
     pip install -r requirements.txt
     ```
 
+4.  Install the package in editable mode to enable the `pdf-decode` CLI command:
+    ```bash
+    pip install -e .
+    ```
+
 ## Usage
 
-The tool can be used via the command line.
+The tool can be used via the command line (after `pip install -e .`).
 
 ### Process a single file
 ```bash
