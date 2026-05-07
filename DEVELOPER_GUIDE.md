@@ -18,6 +18,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
+pip install -e .
+
 # Testa mot en PDF
 pdf-decode in/minfaktura.pdf -o out/
 ```

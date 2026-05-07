@@ -15,6 +15,8 @@ _NUMERIC_SNAP_DISTANCE = 30   # how far left of a column start a digit can be sn
 _BOUNDARY_ZONE = 60           # boundary zone around artikelnr/benamning split
 _FRAGMENT_MAX_LEN = 4         # max chars to consider a word a "fragment"
 _INTERLEAVE_MIN_DIGITS = 8    # min digit count to trigger deinterleave heuristic
+_TEXT_X0_TOLERANCE = 5        # how far left of a column start a text word's x0 can be
+_OVERFLOW_WORD_WIDTH = 700    # words wider than this are off-page overflows; use x0 lookup
 
 # Footer / stop keywords
 _TABLE_STOP_PHRASES = ["att betala", "totalsumma", "er tillgodo", "momsunderlag", "varav moms"]
@@ -300,12 +302,28 @@ def extract_table_rows(words: List[Dict[str, Any]], header_info: Dict[str, Any],
             if assigned:
                 continue
 
-            # Standard column lookup by center-x
+            # Standard column lookup by center-x.
             target_col = None
             for col_name, x_range in columns.items():
                 if x_range['start'] <= word_center_x < x_range['end']:
                     target_col = col_name
                     break
+
+            # Override for off-page overflow text words (e.g. a very long serial-
+            # number string whose x1 >> page width makes the centre land in the
+            # summa column).  For these, anchor by x0 instead.
+            if (not _is_numeric_text(word['text'])
+                    and (word['x1'] - word['x0']) > _OVERFLOW_WORD_WIDTH):
+                overflow_col = None
+                best_start = -1
+                for col_name, x_range in columns.items():
+                    if (x_range['start'] <= word['x0'] + _TEXT_X0_TOLERANCE
+                            and word['x0'] < x_range['end']
+                            and x_range['start'] > best_start):
+                        best_start = x_range['start']
+                        overflow_col = col_name
+                if overflow_col:
+                    target_col = overflow_col
 
             # Refine near the artikelnr / benämning boundary
             if target_col:
