@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.1.7 (2026-05-11)
+
+### Felrättningar
+*   **Spökbelopp i artikelrader med långa serialnummersträngar**: När `pdfplumber` extraherade en lång kommaseparerad serialnummersträng (t.ex. `2603N2635,2603N2636,...`) som ett enda ord svämmar texten utanför sidan (`x1 > 980 pt`). Det geometriska centret hamnade då i summa-kolumnen, och `parse_swedish_amount` hittade ett falskt belopp inuti strängen (t.ex. `2635,26`). Resultatet var en felaktig spökrad med ett bråktalsvärde i `summa` och att artikelns fortsättningsrader inte slogs ihop korrekt. Ord bredare än 700 pt tilldelas nu kolumn baserat på vänsterkant (`x0`) istället för centret.
+
 ## v1.1.6 (2026-05-04)
 
 ### Felrättningar
