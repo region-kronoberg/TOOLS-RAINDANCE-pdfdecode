@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Tuple, Callable
+﻿from typing import List, Dict, Any, Optional, Tuple, Callable
 from .utils import normalize_text, parse_swedish_date, parse_swedish_amount, parse_bankgiro, parse_plusgiro
 from .geometry import group_words_by_line
 from .constants import ANCHORS, LINE_Y_TOLERANCE
@@ -560,5 +560,27 @@ def parse_header(pages_data: List[Dict[str, Any]]) -> Dict[str, Any]:
             unique_adjustments.append(adj)
 
     result['justeringar'] = unique_adjustments
+
+    # Some credit invoices expose a pre-adjustment "Nettobelopp" that is
+    # higher than the final payable amount. When we have a credit invoice,
+    # zero VAT, no explicit adjustments, and the parsed subtotal is still
+    # above the payable total, prefer the payable total instead of the raw
+    # net amount. This keeps the stored subtotal aligned with the invoice's
+    # final amount and avoids repeating the same mismatch on similar cases.
+    if (
+        result.get('fakturatyp') == "Kreditfaktura"
+        and result.get('moms_belopp') == 0
+        and not result['justeringar']
+        and result.get('delsumma_exkl_moms') is not None
+        and result.get('totalsumma') is not None
+        and result['delsumma_exkl_moms'] > result['totalsumma']
+    ):
+        logger.debug(
+            "Reconciled delsumma_exkl_moms from %s to totalsumma %s for %s",
+            result['delsumma_exkl_moms'],
+            result['totalsumma'],
+            result.get('fakturanummer'),
+        )
+        result['delsumma_exkl_moms'] = result['totalsumma']
 
     return result

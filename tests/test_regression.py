@@ -1,9 +1,9 @@
-"""
-Regressionstester för pdf_decode.
+﻿"""
+Regressionstester fÃ¶r pdf_decode.
 
-Kör parsern mot PDF-filer i in/ och jämför resultatet med
-förväntad JSON i out/before/. Fältet 'extracted_at' ignoreras
-vid jämförelse eftersom det är tidsstämpel.
+KÃ¶r parsern mot PDF-filer i in/ och jÃ¤mfÃ¶r resultatet med
+fÃ¶rvÃ¤ntad JSON i out/before/. FÃ¤ltet 'extracted_at' ignoreras
+vid jÃ¤mfÃ¶relse eftersom det Ã¤r tidsstÃ¤mpel.
 """
 import json
 import pytest
@@ -16,7 +16,7 @@ EXPECTED_DIR = ROOT / "out" / "before"
 
 IGNORED_KEYS = {"extracted_at"}
 
-# Bygg lista av (pdf_path, expected_json_path) för alla matchande filer
+# Bygg lista av (pdf_path, expected_json_path) fÃ¶r alla matchande filer
 _test_cases = []
 if EXPECTED_DIR.exists():
     for expected_json in sorted(EXPECTED_DIR.glob("*.json")):
@@ -26,7 +26,7 @@ if EXPECTED_DIR.exists():
 
 
 def _remove_ignored_keys(data, ignored_keys):
-    """Rekursivt ta bort nycklar som ska ignoreras vid jämförelse."""
+    """Rekursivt ta bort nycklar som ska ignoreras vid jÃ¤mfÃ¶relse."""
     if isinstance(data, dict):
         return {k: _remove_ignored_keys(v, ignored_keys) for k, v in data.items() if k not in ignored_keys}
     elif isinstance(data, list):
@@ -35,7 +35,7 @@ def _remove_ignored_keys(data, ignored_keys):
 
 
 def _load_expected(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -49,7 +49,7 @@ def test_regression_output_matches(pdf_path: Path, expected_path: Path):
     processor = InvoiceProcessor()
     invoice = processor.process(pdf_path)
 
-    assert invoice is not None, f"Parsern returnerade None för {pdf_path.name}"
+    assert invoice is not None, f"Parsern returnerade None fÃ¶r {pdf_path.name}"
 
     actual = json.loads(invoice.model_dump_json(indent=2))
     expected = _load_expected(expected_path)
@@ -58,7 +58,7 @@ def test_regression_output_matches(pdf_path: Path, expected_path: Path):
     expected_clean = _remove_ignored_keys(expected, IGNORED_KEYS)
 
     if actual_clean != expected_clean:
-        # Skapa en läsbar diff för felsökning
+        # Skapa en lÃ¤sbar diff fÃ¶r felsÃ¶kning
         actual_str = json.dumps(actual_clean, indent=2, sort_keys=True, ensure_ascii=False)
         expected_str = json.dumps(expected_clean, indent=2, sort_keys=True, ensure_ascii=False)
 

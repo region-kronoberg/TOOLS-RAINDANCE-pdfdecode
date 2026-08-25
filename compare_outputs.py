@@ -1,11 +1,11 @@
-import json
+﻿import json
 import os
 import difflib
 import sys
 
 def load_json(filepath):
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
             return json.load(f)
     except FileNotFoundError:
         return None
