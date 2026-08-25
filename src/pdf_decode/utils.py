@@ -34,7 +34,7 @@ def parse_swedish_amount(text: str) -> Optional[Decimal]:
     # But we want to be specific.
     
     # Look for X,XX or X,X
-    matches = re.findall(r'-?[\d\s\.]+,[\d]{1,2}-?', text)
+    matches = re.findall(r'(?<![A-Za-z0-9])-?[\d\s\.]+,[\d]{1,2}-?(?![A-Za-z0-9])', text)
     if matches:
         for m in matches:
             val = _parse_clean_amount(m)
